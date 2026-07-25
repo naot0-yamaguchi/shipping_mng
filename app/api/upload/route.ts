@@ -54,18 +54,23 @@ export async function POST(req: NextRequest) {
     console.log("✅ [UPLOAD API] R2 Upload Success");
 
     // 4. Cloudflare D1 へレコード追記
-    // （D1テーブルに created_at が定義されている場合も考慮し JST 時刻を追加指定、または基本情報登録）
-    console.log("⏳ [UPLOAD API] D1 Inserting Record...");
-    
+    console.log(`⏳ [UPLOAD API] D1 Inserting Record for seq_no: ${seqNo}`);
+
+    // ★ 親テーブル(shipping_orders)に該当の seq_no が無ければ先に作成（外部キーエラー防止）
+    await queryD1(
+      `INSERT OR IGNORE INTO shipping_orders (seq_no) VALUES (?)`,
+      [seqNo]
+    );
+
     // 現在のJST（日本時間）文字列を作成（YYYY-MM-DD HH:mm:ss）
     const jstNow = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" });
 
-    // ※テーブル側に created_at カラムがある場合は created_at もINSERTに含めると便利です
+    // 画像レコードの挿入
     await queryD1(
       `INSERT INTO shipping_images (seq_no, file_name, original_name, mime_type, file_size, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
       [seqNo, fileName, file.name, file.type || "image/jpeg", file.size, jstNow]
     ).catch(async (err) => {
-      // カラム数不一致エラー対策（created_at がないテーブル定義の場合のフォールバック）
+      // created_at カラムが無い場合のフォールバック
       console.warn("⚠️ [UPLOAD API] created_atなしでD1へフォールバック挿入します:", err.message);
       await queryD1(
         `INSERT INTO shipping_images (seq_no, file_name, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?)`,
