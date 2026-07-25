@@ -312,36 +312,53 @@ export default function ShippingManagementApp() {
   };
 
   // ----------------------------------------------------
-  // 複数画像自動圧縮＆即時プレビュー・アップロード（安定版）
+  // デバッグログ付き 画像アップロード処理
   // ----------------------------------------------------
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0 || isLocked) return;
+    console.log("📸 [Frontend] File input triggered. Files length:", files?.length);
+
+    if (!files || files.length === 0 || isLocked) {
+      console.log("📸 [Frontend] Upload skipped (no files or locked)");
+      return;
+    }
 
     setUploading(true);
-    setMessage(t.uploadingMsg);
+    setMessage("画像を処理中...");
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      console.log(`📸 [Frontend] Processing file #${i + 1}:`, file.name, `(${file.size} bytes)`);
+
       try {
+        // ① 圧縮開始
+        console.log("📸 [Frontend] Starting compression...");
         const compressed = await imageCompression(file, {
           maxSizeMB: 1,
           maxWidthOrHeight: 1920,
           useWebWorker: true,
         });
+        console.log("📸 [Frontend] Compression complete. Compressed size:", compressed.size);
 
+        // ② Blob URL生成
         const localBlobUrl = URL.createObjectURL(compressed);
+        console.log("📸 [Frontend] Local Blob URL created:", localBlobUrl);
 
+        // ③ FormData作成
         const formData = new FormData();
         formData.append("file", compressed, file.name);
         formData.append("seq_no", seqNo);
 
+        // ④ Fetch送信
+        console.log("📸 [Frontend] Sending fetch request to /api/upload...");
         const res = await fetch("/api/upload", {
           method: "POST",
           body: formData,
         });
 
+        console.log("📸 [Frontend] Response status:", res.status, res.statusText);
         const uploadData = await res.json();
+        console.log("📸 [Frontend] Response JSON:", uploadData);
 
         if (res.ok) {
           const newImgItem: ImageItem = {
@@ -350,19 +367,29 @@ export default function ShippingManagementApp() {
             previewUrl: localBlobUrl,
           };
 
-          setImages((prev) => [...prev, newImgItem]);
+          setImages((prev) => {
+            const updated = [...prev, newImgItem];
+            console.log("📸 [Frontend] Updated images state count:", updated.length);
+            return updated;
+          });
+
           setPreviewUrls((prev) => ({
             ...prev,
             [newImgItem.file_name]: localBlobUrl,
           }));
+
+          setMessage(`✅ [${i + 1}/${files.length}] アップロード成功: ${file.name}`);
+        } else {
+          console.error("📸 [Frontend] API Returned Error:", uploadData);
+          setMessage(`❌ サーバーエラー: ${uploadData.error || "失敗しました"}`);
         }
-      } catch (err) {
-        console.error("Upload error:", err);
+      } catch (err: any) {
+        console.error("📸 [Frontend] Exception during upload:", err);
+        setMessage(`❌ 例外エラー: ${err?.message || JSON.stringify(err)}`);
       }
     }
 
     setUploading(false);
-    setMessage(t.uploadSuccess);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
