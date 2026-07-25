@@ -1,14 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryD1 } from "@/lib/d1";
 
-// シーケンス情報の取得
+// シーケンス情報（またはFEDEX追跡番号）からのデータ取得
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const seq = searchParams.get("seq");
+    let seq = searchParams.get("seq");
+    const fedex = searchParams.get("fedex");
 
-    if (!seq) {
-      return NextResponse.json({ error: "シーケンス番号が必要です" }, { status: 400 });
+    // seq も fedex も指定されていない場合は 400
+    if (!seq && !fedex) {
+      return NextResponse.json(
+        { error: "シーケンス番号(?seq=) または FEDEX追跡番号(?fedex=) が必要です" },
+        { status: 400 }
+      );
+    }
+
+    // FEDEX 追跡番号から検索された場合、まず該当する seq_no を取得
+    if (!seq && fedex) {
+      const fedexRaw = await queryD1(
+        `SELECT seq_no FROM shipping_orders WHERE fedex_tracking_no = ?`,
+        [fedex.trim()]
+      );
+      const fedexRows = fedexRaw?.result?.[0]?.results?.rows || fedexRaw?.rows || [];
+
+      if (fedexRows.length === 0) {
+        return NextResponse.json(
+          { error: "指定されたFEDEX追跡番号に該当するデータが見つかりません" },
+          { status: 404 }
+        );
+      }
+
+      seq = String(fedexRows[0][0]);
     }
 
     // 1. Order情報の取得
@@ -16,7 +39,6 @@ export async function GET(req: NextRequest) {
     const orderRows = orderRaw?.result?.[0]?.results?.rows || orderRaw?.rows || [];
     const orderCols = orderRaw?.result?.[0]?.results?.columns || orderRaw?.columns || [];
 
-    // 型を Record<string, any> | null として明示定義
     let order: Record<string, any> | null = null;
     if (orderRows.length > 0) {
       const orderObj: Record<string, any> = {};
@@ -43,6 +65,7 @@ export async function GET(req: NextRequest) {
     const isLocked = Boolean(order?.fedex_tracking_no && String(order.fedex_tracking_no).trim() !== "");
 
     return NextResponse.json({
+      seqNo: seq,
       seq_no: seq,
       order,
       images,
