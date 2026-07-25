@@ -44,34 +44,45 @@ export default function ShippingManagementApp() {
   // QRスキャナー制御
   // ----------------------------------------------------
   const startScanner = async () => {
+    // 1. スキャナ表示フラグをオンにする
     setIsScanning(true);
     setMessage("");
-    try {
-      const html5Qrcode = new Html5Qrcode("reader");
-      html5QrcodeRef.current = html5Qrcode;
 
-      await html5Qrcode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          let extractedSeq = decodedText;
-          try {
-            const url = new URL(decodedText);
-            const param = url.searchParams.get("seq");
-            if (param) extractedSeq = param;
-          } catch (e) {}
+    // 2. Reactの再描画（DOM生成）を待つために setTimeout で1周送る
+    setTimeout(async () => {
+      try {
+        const readerElement = document.getElementById("reader");
+        if (!readerElement) {
+          setMessage("エラー: QRリーダーの表示要素が見つかりません。");
+          setIsScanning(false);
+          return;
+        }
 
-          stopScanner();
-          handleSelectSeq(extractedSeq);
-        },
-        () => {}
-      );
-    } catch (err: any) {
-      console.error(err);
-      // ★ エラーの具体的な内容（NotAllowedError や NotFoundError など）を画面に表示
-      setMessage(`カメラ起動エラー: ${err?.name || ''} - ${err?.message || JSON.stringify(err)}`);
-      setIsScanning(false);
-    }
+        const html5Qrcode = new Html5Qrcode("reader");
+        html5QrcodeRef.current = html5Qrcode;
+
+        await html5Qrcode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            let extractedSeq = decodedText;
+            try {
+              const url = new URL(decodedText);
+              const param = url.searchParams.get("seq");
+              if (param) extractedSeq = param;
+            } catch (e) {}
+
+            stopScanner();
+            handleSelectSeq(extractedSeq);
+          },
+          () => {}
+        );
+      } catch (err: any) {
+        console.error(err);
+        setMessage(`カメラ起動エラー: ${err?.name || ""} - ${err?.message || JSON.stringify(err)}`);
+        setIsScanning(false);
+      }
+    }, 100); // 100ms 待つことで確実に <div id="reader"> が生成されます
   };
 
   const stopScanner = async () => {
