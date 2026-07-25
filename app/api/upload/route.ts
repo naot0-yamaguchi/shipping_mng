@@ -26,10 +26,13 @@ export async function POST(req: NextRequest) {
 
     await r2Client.send(command);
 
-    // 2. Cloudflare D1 にレコードを保存
+    // formData から seq_no を取得
+    const seqNo = (formData.get("seq_no") as string) || "UNKNOWN";
+
+    // D1 登録時に seq_no も合わせてインサート
     await queryD1(
-      `INSERT INTO shipping_images (file_name, original_name, tracking_no, mime_type, file_size) VALUES (?, ?, ?, ?, ?)`,
-      [fileName, file.name, trackingNo, file.type, file.size]
+      `INSERT INTO shipping_images (seq_no, file_name, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?)`,
+      [seqNo, fileName, file.name, file.type, file.size]
     );
 
     return NextResponse.json({

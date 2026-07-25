@@ -22,7 +22,7 @@ export async function queryD1(sql: string, params: any[] = []) {
   if (!res.ok || !data.success) {
     throw new Error(data.errors?.[0]?.message || "D1 Query failed");
   }
-
+  
   // result の最初の要素（クエリ実行結果）を返す
-  return data.result?.[0] || data;
+  return data.result[0].results;
 }

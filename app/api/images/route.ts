@@ -6,10 +6,10 @@ export async function GET() {
     const rawResult = await queryD1(
       `SELECT * FROM shipping_images ORDER BY id DESC`
     );
-
+    
     // queryD1 の戻り値、または results[0] から columns と rows を探す
-    const columns: string[] = rawResult?.results?.[0]?.columns || rawResult?.columns || [];
-    const rows: any[][] = rawResult?.results?.[0]?.rows || rawResult?.rows || [];
+    const columns: string[] = rawResult?.columns || [];
+    const rows: any[][] = rawResult?.rows || [];
 
     let imagesList: any[] = [];
 

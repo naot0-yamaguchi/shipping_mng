@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import imageCompression from "browser-image-compression"; // 1. ライブラリをインポート
+import imageCompression from "browser-image-compression";
+import { QRCodeCanvas } from "qrcode.react"; // 1. qrcode.react から QRCodeCanvas をインポート
 
 type ImageRecord = {
   id: number;
@@ -17,6 +18,9 @@ export default function ImageUploader() {
   const [uploading, setUploading] = useState(false);
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  
+  // 2. QRコードモーダル用の状態を追加
+  const [qrValue, setQrValue] = useState<string | null>(null);
 
   // 一覧取得
   const fetchImages = async () => {
@@ -44,24 +48,19 @@ export default function ImageUploader() {
     setUploading(true);
 
     try {
-      // 2. 圧縮オプションの設定
       const options = {
-        maxSizeMB: 1,            // 最大ファイルサイズ (例: 1MB以下に抑える)
-        maxWidthOrHeight: 1920,   // 画像の最大幅/高さ (長辺を1920pxにリサイズ)
-        useWebWorker: true,      // バックグラウンドで高速処理
-        fileType: "image/jpeg",  // 圧縮後のフォーマット
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+        fileType: "image/jpeg",
       };
 
       console.log(`圧縮前サイズ: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-
-      // 3. 画像の圧縮実行
       const compressedFile = await imageCompression(file, options);
-
       console.log(`圧縮後サイズ: ${(compressedFile.size / 1024 / 1024).toFixed(2)} MB`);
 
-      // 4. 圧縮後のファイルを FormData にセットして送信
       const formData = new FormData();
-      formData.append("file", compressedFile, file.name); // 元のファイル名を維持
+      formData.append("file", compressedFile, file.name);
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -70,7 +69,7 @@ export default function ImageUploader() {
 
       if (res.ok) {
         setFile(null);
-        fetchImages(); // 一覧を更新
+        fetchImages();
       }
     } catch (error) {
       console.error("圧縮・アップロード失敗:", error);
@@ -130,12 +129,20 @@ export default function ImageUploader() {
                 <td className="p-2">{img.id}</td>
                 <td className="p-2">{img.original_name}</td>
                 <td className="p-2">{(img.file_size / 1024 / 1024).toFixed(2)} MB</td>
-                <td className="p-2">
+                <td className="p-2 space-x-3">
                   <button
                     onClick={() => handlePreview(img.file_name)}
                     className="text-blue-500 underline"
                   >
                     表示
+                  </button>
+
+                  {/* 3. QRコード表示用ボタンを追加 */}
+                  <button
+                    onClick={() => setQrValue(img.tracking_no || img.file_name)}
+                    className="px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-500"
+                  >
+                    QRコード
                   </button>
                 </td>
               </tr>
@@ -143,6 +150,33 @@ export default function ImageUploader() {
           </tbody>
         </table>
       </div>
+
+      {/* 4. QRコードモーダルダイアログ */}
+      {qrValue && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-sm w-full text-center shadow-xl">
+            <h3 className="text-lg font-bold text-white mb-4">登録情報 QRコード</h3>
+            
+            <div className="bg-white p-4 rounded-md inline-block mb-4">
+              <QRCodeCanvas
+                value={qrValue}
+                size={200}
+                level={"H"}
+                includeMargin={true}
+              />
+            </div>
+
+            <p className="text-xs text-zinc-400 break-all mb-6 font-mono">{qrValue}</p>
+
+            <button
+              onClick={() => setQrValue(null)}
+              className="w-full py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded transition"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
