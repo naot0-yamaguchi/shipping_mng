@@ -29,7 +29,7 @@ export default function ShippingManagementApp() {
   const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
-  // 画像ズーム・モーダル用ステート（インデックスで管理）
+  // 画像ズーム・モーダル用ステート
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
@@ -94,7 +94,24 @@ export default function ShippingManagementApp() {
   };
 
   // ----------------------------------------------------
-  // シーケンス詳細データロード
+  // 画像一覧のみ再取得（フォームに入力中の顧客名等を消さないため）
+  // ----------------------------------------------------
+  const refreshImagesOnly = async (targetSeq: string) => {
+    try {
+      const res = await fetch(`/api/shipping?seq=${encodeURIComponent(targetSeq)}`);
+      const data = await res.json();
+      if (res.ok) {
+        const fetchedImages: ImageItem[] = data.images || [];
+        setImages(fetchedImages);
+        fetchedImages.forEach((img) => fetchPreviewUrl(img.file_name));
+      }
+    } catch (e) {
+      console.error("画像取得エラー:", e);
+    }
+  };
+
+  // ----------------------------------------------------
+  // シーケンス詳細データ全ロード
   // ----------------------------------------------------
   const handleSelectSeq = async (targetSeq: string) => {
     setSeqNo(targetSeq);
@@ -113,8 +130,6 @@ export default function ShippingManagementApp() {
         setFedexTrackingNo(data.order?.fedex_tracking_no || "");
         const fetchedImages: ImageItem[] = data.images || [];
         setImages(fetchedImages);
-
-        // 事前にプレビューURLを取得してキャッシュ
         fetchedImages.forEach((img) => fetchPreviewUrl(img.file_name));
       } else {
         setMessage("データ読込エラー");
@@ -126,7 +141,7 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // 顧客一覧検索（フォーカス時・入力時に検索）
+  // 顧客一覧検索
   const fetchCustomers = async (query: string = "") => {
     try {
       const res = await fetch(`/api/customers?q=${encodeURIComponent(query)}`);
@@ -188,10 +203,11 @@ export default function ShippingManagementApp() {
 
     setUploading(false);
     setMessage("画像を追加しました");
-    handleSelectSeq(seqNo); // リロードして全画像取得
+    // 入力中の顧客名を上書き・消去しないよう、画像リストのみ再取得
+    await refreshImagesOnly(seqNo);
   };
 
-  // 画像URL取得（キャッシュ対応）
+  // 画像URL取得
   const fetchPreviewUrl = async (key: string) => {
     if (previewUrls[key]) return previewUrls[key];
     try {
@@ -241,7 +257,6 @@ export default function ShippingManagementApp() {
   };
 
   return (
-    // 1. スクロール時の「引っ張って更新」を防止するスタイリング (overscroll-none)
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 max-w-lg mx-auto overscroll-y-contain touch-manipulation">
       {/* ヘッダーナビ */}
       <header className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-3">
@@ -308,36 +323,37 @@ export default function ShippingManagementApp() {
 
       {/* 詳細画面 */}
       {mode === "detail" && (
-        <div className="space-y-5">
-          {/* ステータスバー */}
-          <div className="flex justify-between items-center p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
-            <div>
-              <span className="text-xs text-zinc-500 block">シーケンス番号</span>
-              <span className="text-xl font-extrabold font-mono text-amber-400">{seqNo}</span>
-            </div>
-            <div>
-              {isLocked ? (
-                <span className="px-3 py-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-full">
-                  🔒 閲覧のみ (ロック済み)
-                </span>
-              ) : (
-                <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-full">
-                  ✏️ 編集可能
-                </span>
-              )}
-            </div>
+        <div className="space-y-4">
+          {/* シーケンス番号表示バー */}
+          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between">
+            <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">対象シーケンス</span>
+            <span className="text-xl font-black font-mono text-amber-400">{seqNo}</span>
           </div>
 
-          {/* フォーム */}
+          {/* ステータスセクションラベル（フォーム全体の直上に配置） */}
+          <div className="flex items-center justify-between px-1 pt-2">
+            <span className="text-xs font-bold text-zinc-400 tracking-wider">登録・編集情報</span>
+            {isLocked ? (
+              <span className="px-3 py-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-full">
+                🔒 閲覧のみ (追跡番号登録済み)
+              </span>
+            ) : (
+              <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-full">
+                ✏️ 以下の項目は編集可能
+              </span>
+            )}
+          </div>
+
+          {/* フォームカード */}
           <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-5 shadow-xl">
-            {/* ① お客様名（フォーカス時に一覧表示） */}
+            {/* ① お客様名 */}
             <div className="relative space-y-1">
               <label className="text-xs font-bold text-zinc-300">お客様名</label>
               <input
                 type="text"
                 disabled={isLocked}
                 value={customerName}
-                onFocus={() => fetchCustomers(customerName)} // ★ フォーカスインで候補取得
+                onFocus={() => fetchCustomers(customerName)}
                 onChange={(e) => {
                   setCustomerName(e.target.value);
                   fetchCustomers(e.target.value);
@@ -378,7 +394,7 @@ export default function ShippingManagementApp() {
             <div className="space-y-1">
               <label className="text-xs font-bold text-zinc-300">
                 FEDEX Tracking No.
-                {!isLocked && <span className="text-rose-400 text-xs ml-1">※入力・保存で編集不可になります</span>}
+                {!isLocked && <span className="text-rose-400 text-xs ml-1">※登録すると編集不可になります</span>}
               </label>
               <input
                 type="text"
@@ -390,7 +406,7 @@ export default function ShippingManagementApp() {
               />
             </div>
 
-            {/* ③ 商品画像（複数対応・連続追加可能） */}
+            {/* ③ 商品画像 */}
             <div className="space-y-3 pt-2 border-t border-zinc-800">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-zinc-300">商品画像 (登録件数: {images.length}枚)</label>
@@ -407,14 +423,14 @@ export default function ShippingManagementApp() {
                 />
               )}
 
-              {/* 画像サムネイル一覧（クリックで拡大表示） */}
+              {/* サムネイル一覧 */}
               <div className="grid grid-cols-3 gap-2 pt-2">
                 {images.map((img, idx) => (
                   <div
                     key={img.id}
                     onClick={() => {
                       fetchPreviewUrl(img.file_name);
-                      setPreviewIndex(idx); // モーダル起動
+                      setPreviewIndex(idx);
                     }}
                     className="aspect-square bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer relative group flex items-center justify-center"
                   >
@@ -449,12 +465,9 @@ export default function ShippingManagementApp() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 4. 複数画像ズーム・プレビュービューアーモーダル              */}
-      {/* ======================================================== */}
+      {/* 画像拡大モーダル */}
       {previewIndex !== null && images[previewIndex] && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col justify-between p-4 backdrop-blur-sm">
-          {/* モーダルヘッダー */}
           <div className="flex justify-between items-center text-zinc-300">
             <span className="text-sm font-bold">
               画像 {previewIndex + 1} / {images.length}
@@ -467,7 +480,6 @@ export default function ShippingManagementApp() {
             </button>
           </div>
 
-          {/* メイン拡大画像 */}
           <div className="flex-1 flex items-center justify-center my-4 overflow-hidden">
             {previewUrls[images[previewIndex].file_name] ? (
               <img
@@ -480,7 +492,6 @@ export default function ShippingManagementApp() {
             )}
           </div>
 
-          {/* 前へ・次へナビゲーション */}
           <div className="flex justify-between items-center gap-4">
             <button
               disabled={previewIndex === 0}
