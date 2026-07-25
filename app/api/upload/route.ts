@@ -1,47 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { r2Client } from "@/lib/r2";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { queryD1 } from "@/lib/d1";
+
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+  },
+});
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const trackingNo = (formData.get("trackingNo") as string) || "";
+    const file = formData.get("file") as File;
+    const seqNo = (formData.get("seq_no") as string) || "UNKNOWN";
 
     if (!file) {
-      return NextResponse.json({ error: "ファイルが見つかりません" }, { status: 400 });
+      return NextResponse.json({ error: "ファイルが指定されていません" }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = `${Date.now()}_${file.name}`;
 
-    // 1. Cloudflare R2 へアップロード
-    const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME || "shipping-images",
-      Key: fileName,
-      Body: buffer,
-      ContentType: file.type,
-    });
+    // 1. Cloudflare R2 に保存
+    await r2.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: fileName,
+        Body: buffer,
+        ContentType: file.type,
+      })
+    );
 
-    await r2Client.send(command);
-
-    // formData から seq_no を取得
-    const seqNo = (formData.get("seq_no") as string) || "UNKNOWN";
-
-    // D1 登録時に seq_no も合わせてインサート
+    // 2. Cloudflare D1 に追記（一意なIDで毎回新規レコード追加）
     await queryD1(
       `INSERT INTO shipping_images (seq_no, file_name, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?)`,
       [seqNo, fileName, file.name, file.type, file.size]
     );
 
-    return NextResponse.json({
-      success: true,
-      fileName,
-      message: "R2への保存およびD1へのメタデータ登録が完了しました",
-    });
+    return NextResponse.json({ success: true, fileName });
   } catch (error) {
-    console.error("Upload & D1 Error:", error);
-    return NextResponse.json({ error: "処理に失敗しました" }, { status: 500 });
+    console.error("Upload Error:", error);
+    return NextResponse.json({ error: "アップロード失敗" }, { status: 500 });
   }
 }

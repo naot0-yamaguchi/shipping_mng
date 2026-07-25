@@ -16,7 +16,6 @@ type Customer = {
 };
 
 export default function ShippingManagementApp() {
-  // 画面モード: scanner (QRスキャン画面) | detail (情報入力・表示画面)
   const [mode, setMode] = useState<"scanner" | "detail">("scanner");
   const [seqNo, setSeqNo] = useState<string>("");
 
@@ -25,11 +24,14 @@ export default function ShippingManagementApp() {
   const [customerName, setCustomerName] = useState<string>("");
   const [fedexTrackingNo, setFedexTrackingNo] = useState<string>("");
   const [images, setImages] = useState<ImageItem[]>([]);
-  const [selectedPreview, setSelectedPreview] = useState<string | null>(null);
 
   // 顧客補完用ステート
   const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+
+  // 画像ズーム・モーダル用ステート（インデックスで管理）
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   // ステータス・UI用
   const [loading, setLoading] = useState<boolean>(false);
@@ -44,16 +46,14 @@ export default function ShippingManagementApp() {
   // QRスキャナー制御
   // ----------------------------------------------------
   const startScanner = async () => {
-    // 1. スキャナ表示フラグをオンにする
     setIsScanning(true);
     setMessage("");
 
-    // 2. Reactの再描画（DOM生成）を待つために setTimeout で1周送る
     setTimeout(async () => {
       try {
         const readerElement = document.getElementById("reader");
         if (!readerElement) {
-          setMessage("エラー: QRリーダーの表示要素が見つかりません。");
+          setMessage("エラー: QRリーダー要素が見つかりません");
           setIsScanning(false);
           return;
         }
@@ -82,7 +82,7 @@ export default function ShippingManagementApp() {
         setMessage(`カメラ起動エラー: ${err?.name || ""} - ${err?.message || JSON.stringify(err)}`);
         setIsScanning(false);
       }
-    }, 100); // 100ms 待つことで確実に <div id="reader"> が生成されます
+    }, 100);
   };
 
   const stopScanner = async () => {
@@ -101,7 +101,7 @@ export default function ShippingManagementApp() {
     setLoading(true);
     setMode("detail");
     setMessage("");
-    setSelectedPreview(null);
+    setPreviewIndex(null);
 
     try {
       const res = await fetch(`/api/shipping?seq=${encodeURIComponent(targetSeq)}`);
@@ -111,7 +111,11 @@ export default function ShippingManagementApp() {
         setIsLocked(data.isLocked);
         setCustomerName(data.order?.customer_name || "");
         setFedexTrackingNo(data.order?.fedex_tracking_no || "");
-        setImages(data.images || []);
+        const fetchedImages: ImageItem[] = data.images || [];
+        setImages(fetchedImages);
+
+        // 事前にプレビューURLを取得してキャッシュ
+        fetchedImages.forEach((img) => fetchPreviewUrl(img.file_name));
       } else {
         setMessage("データ読込エラー");
       }
@@ -122,26 +126,19 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // ----------------------------------------------------
-  // 顧客インクリメンタル検索
-  // ----------------------------------------------------
-  useEffect(() => {
-    if (isLocked || !customerName.trim()) {
-      setCustomerSuggestions([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      const res = await fetch(`/api/customers?q=${encodeURIComponent(customerName)}`);
+  // 顧客一覧検索（フォーカス時・入力時に検索）
+  const fetchCustomers = async (query: string = "") => {
+    try {
+      const res = await fetch(`/api/customers?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (data.customers) {
         setCustomerSuggestions(data.customers);
         setShowSuggestions(true);
       }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [customerName, isLocked]);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // 新規顧客追加
   const handleAddCustomer = async () => {
@@ -158,14 +155,14 @@ export default function ShippingManagementApp() {
   };
 
   // ----------------------------------------------------
-  // 複数画像自動圧縮＆アップロード
+  // 複数画像自動圧縮＆追記アップロード
   // ----------------------------------------------------
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || isLocked) return;
 
     setUploading(true);
-    setMessage("画像を圧縮・アップロード中...");
+    setMessage("画像を処理・アップロード中...");
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -190,19 +187,28 @@ export default function ShippingManagementApp() {
     }
 
     setUploading(false);
-    setMessage("画像のアップロードが完了しました");
-    handleSelectSeq(seqNo); // 一覧再取得
+    setMessage("画像を追加しました");
+    handleSelectSeq(seqNo); // リロードして全画像取得
   };
 
-  // 画像プレビューURL取得
-  const handlePreviewImage = async (key: string) => {
-    const res = await fetch(`/api/image-url?key=${encodeURIComponent(key)}`);
-    const data = await res.json();
-    if (data.url) setSelectedPreview(data.url);
+  // 画像URL取得（キャッシュ対応）
+  const fetchPreviewUrl = async (key: string) => {
+    if (previewUrls[key]) return previewUrls[key];
+    try {
+      const res = await fetch(`/api/image-url?key=${encodeURIComponent(key)}`);
+      const data = await res.json();
+      if (data.url) {
+        setPreviewUrls((prev) => ({ ...prev, [key]: data.url }));
+        return data.url;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
   };
 
   // ----------------------------------------------------
-  // 出荷情報の保存・確定
+  // 出荷情報の保存
   // ----------------------------------------------------
   const handleSaveOrder = async () => {
     if (!seqNo) return;
@@ -223,7 +229,7 @@ export default function ShippingManagementApp() {
 
       if (res.ok) {
         setMessage("保存しました");
-        handleSelectSeq(seqNo); // ロック状態などを再読み込み
+        handleSelectSeq(seqNo);
       } else {
         setMessage(data.error || "保存に失敗しました");
       }
@@ -235,7 +241,8 @@ export default function ShippingManagementApp() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 max-w-lg mx-auto">
+    // 1. スクロール時の「引っ張って更新」を防止するスタイリング (overscroll-none)
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 max-w-lg mx-auto overscroll-y-contain touch-manipulation">
       {/* ヘッダーナビ */}
       <header className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-3">
         <h1 className="text-xl font-black text-amber-500 tracking-wider">TMS APP</h1>
@@ -256,9 +263,7 @@ export default function ShippingManagementApp() {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 1. QRコード読み取り画面 (スキャナー)                       */}
-      {/* ======================================================== */}
+      {/* スキャン画面 */}
       {mode === "scanner" && (
         <div className="space-y-6 text-center py-6">
           <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl space-y-4">
@@ -285,31 +290,26 @@ export default function ShippingManagementApp() {
             )}
           </div>
 
-          {/* テスト用手入力 */}
           <div className="p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl space-y-2 text-left">
             <label className="text-xs text-zinc-500">直接シーケンス指定（テスト用）</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="例: SEQ001"
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && e.currentTarget.value) {
-                    handleSelectSeq(e.currentTarget.value);
-                  }
-                }}
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="例: SEQ001"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value) {
+                  handleSelectSeq(e.currentTarget.value);
+                }
+              }}
+            />
           </div>
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 2. QRコード情報表示・登録画面                            */}
-      {/* ======================================================== */}
+      {/* 詳細画面 */}
       {mode === "detail" && (
         <div className="space-y-5">
-          {/* シーケンス・ステータスバー */}
+          {/* ステータスバー */}
           <div className="flex justify-between items-center p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
             <div>
               <span className="text-xs text-zinc-500 block">シーケンス番号</span>
@@ -328,22 +328,26 @@ export default function ShippingManagementApp() {
             </div>
           </div>
 
-          {/* フォーム領域 */}
+          {/* フォーム */}
           <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-5 shadow-xl">
-            {/* ① お客さんの名前 (サジェスト機能付き) */}
+            {/* ① お客様名（フォーカス時に一覧表示） */}
             <div className="relative space-y-1">
               <label className="text-xs font-bold text-zinc-300">お客様名</label>
               <input
                 type="text"
                 disabled={isLocked}
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="顧客名を入力（例: 山口 直人）"
+                onFocus={() => fetchCustomers(customerName)} // ★ フォーカスインで候補取得
+                onChange={(e) => {
+                  setCustomerName(e.target.value);
+                  fetchCustomers(e.target.value);
+                }}
+                placeholder="フォーカスで顧客候補を表示"
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-sm focus:outline-none focus:border-amber-500 disabled:bg-zinc-800/40 disabled:text-zinc-500"
               />
 
-              {/* 顧客サジェストドロップダウン */}
-              {!isLocked && showSuggestions && customerName.trim() && (
+              {/* 顧客候補ドロップダウン */}
+              {!isLocked && showSuggestions && (
                 <div className="absolute top-full left-0 right-0 z-30 bg-zinc-800 border border-zinc-700 rounded-lg mt-1 shadow-2xl max-h-48 overflow-y-auto">
                   {customerSuggestions.map((c) => (
                     <div
@@ -358,13 +362,14 @@ export default function ShippingManagementApp() {
                     </div>
                   ))}
 
-                  {/* 一致する顧客がない場合の新規追加ボタン */}
-                  <div
-                    onClick={handleAddCustomer}
-                    className="p-3 text-xs text-amber-400 font-bold hover:bg-zinc-700 cursor-pointer bg-zinc-800/80"
-                  >
-                    ＋ 「{customerName}」を新規顧客として登録
-                  </div>
+                  {customerName.trim() && (
+                    <div
+                      onClick={handleAddCustomer}
+                      className="p-3 text-xs text-amber-400 font-bold hover:bg-zinc-700 cursor-pointer bg-zinc-900/90"
+                    >
+                      ＋ 「{customerName}」を新規顧客として登録
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -385,11 +390,10 @@ export default function ShippingManagementApp() {
               />
             </div>
 
-            {/* ③ 中の商品の画像（複数対応） */}
+            {/* ③ 商品画像（複数対応・連続追加可能） */}
             <div className="space-y-3 pt-2 border-t border-zinc-800">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-zinc-300">商品画像（複数可能）</label>
-                <span className="text-xs text-zinc-500">{images.length} 件</span>
+                <label className="text-xs font-bold text-zinc-300">商品画像 (登録件数: {images.length}枚)</label>
               </div>
 
               {!isLocked && (
@@ -399,34 +403,37 @@ export default function ShippingManagementApp() {
                   accept="image/*"
                   disabled={uploading}
                   onChange={handleImageUpload}
-                  className="block w-full text-xs text-zinc-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500/10 file:text-amber-400 hover:file:bg-amber-500/20"
+                  className="block w-full text-xs text-zinc-400 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500/10 file:text-amber-400 hover:file:bg-amber-500/20 cursor-pointer"
                 />
               )}
 
-              {/* 画像サムネイルグリッド */}
+              {/* 画像サムネイル一覧（クリックで拡大表示） */}
               <div className="grid grid-cols-3 gap-2 pt-2">
-                {images.map((img) => (
-                  <button
+                {images.map((img, idx) => (
+                  <div
                     key={img.id}
-                    onClick={() => handlePreviewImage(img.file_name)}
-                    className="aspect-square bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden flex items-center justify-center text-xs text-zinc-400 hover:border-amber-500 transition relative"
+                    onClick={() => {
+                      fetchPreviewUrl(img.file_name);
+                      setPreviewIndex(idx); // モーダル起動
+                    }}
+                    className="aspect-square bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden cursor-pointer relative group flex items-center justify-center"
                   >
-                    <span className="p-1 text-[10px] break-all line-clamp-2">{img.original_name}</span>
-                  </button>
+                    {previewUrls[img.file_name] ? (
+                      <img
+                        src={previewUrls[img.file_name]}
+                        alt={img.original_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 p-1 text-center">読み込み中...</span>
+                    )}
+                    <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded">
+                      #{idx + 1}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>
-
-            {/* 画像拡大プレビュー表示 */}
-            {selectedPreview && (
-              <div className="p-3 bg-black border border-zinc-700 rounded-xl space-y-2">
-                <div className="flex justify-between items-center text-xs text-zinc-400">
-                  <span>プレビュー</span>
-                  <button onClick={() => setSelectedPreview(null)} className="text-rose-400">✕ 閉じる</button>
-                </div>
-                <img src={selectedPreview} alt="Preview" className="w-full h-auto rounded-lg max-h-64 object-contain" />
-              </div>
-            )}
 
             {/* ④ アクションボタン */}
             {!isLocked && (
@@ -438,6 +445,59 @@ export default function ShippingManagementApp() {
                 {loading ? "保存中..." : "情報を保存・更新する"}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 4. 複数画像ズーム・プレビュービューアーモーダル              */}
+      {/* ======================================================== */}
+      {previewIndex !== null && images[previewIndex] && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col justify-between p-4 backdrop-blur-sm">
+          {/* モーダルヘッダー */}
+          <div className="flex justify-between items-center text-zinc-300">
+            <span className="text-sm font-bold">
+              画像 {previewIndex + 1} / {images.length}
+            </span>
+            <button
+              onClick={() => setPreviewIndex(null)}
+              className="p-2 bg-zinc-800 text-white rounded-full text-xs hover:bg-zinc-700"
+            >
+              ✕ 閉じる
+            </button>
+          </div>
+
+          {/* メイン拡大画像 */}
+          <div className="flex-1 flex items-center justify-center my-4 overflow-hidden">
+            {previewUrls[images[previewIndex].file_name] ? (
+              <img
+                src={previewUrls[images[previewIndex].file_name]}
+                alt="Zoom Preview"
+                className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+              />
+            ) : (
+              <span className="text-zinc-400">高画質画像をロード中...</span>
+            )}
+          </div>
+
+          {/* 前へ・次へナビゲーション */}
+          <div className="flex justify-between items-center gap-4">
+            <button
+              disabled={previewIndex === 0}
+              onClick={() => setPreviewIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none"
+            >
+              ← 前の画像
+            </button>
+            <button
+              disabled={previewIndex === images.length - 1}
+              onClick={() =>
+                setPreviewIndex((prev) => (prev !== null && prev < images.length - 1 ? prev + 1 : prev))
+              }
+              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none"
+            >
+              次の画像 →
+            </button>
           </div>
         </div>
       )}
