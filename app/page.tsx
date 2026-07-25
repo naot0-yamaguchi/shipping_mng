@@ -12,6 +12,14 @@ type ImageItem = {
   previewUrl?: string;
 };
 
+type SearchResultItem = {
+  seq_no: string;
+  customer_name: string;
+  fedex_tracking_no: string;
+  thumbnail: string | null;
+  isLocked: boolean;
+};
+
 type Customer = {
   id: number;
   name: string;
@@ -19,9 +27,6 @@ type Customer = {
 
 type Language = "ja" | "en" | "th";
 
-// ----------------------------------------------------
-// i18n 辞書定義
-// ----------------------------------------------------
 const dictionary = {
   ja: {
     title: "TMS APP",
@@ -33,6 +38,8 @@ const dictionary = {
     searchBySeq: "直接シーケンス指定（テスト用）",
     searchByFedex: "FEDEX Tracking No. で検索",
     searchBtn: "検索",
+    searchResultsTitle: "検索結果",
+    noResults: "該当する出荷データが見つかりません",
     seqLabel: "対象シーケンス",
     editHeader: "登録・編集情報",
     readOnlyStatus: "🔒 閲覧のみ (追跡番号登録済み)",
@@ -46,7 +53,7 @@ const dictionary = {
     imagesLabel: "商品画像",
     imgCount: "登録件数: {count}枚",
     addPhotosBtn: "📷 写真を追加・撮影（複数可）",
-    compressing: "写真を追加・圧縮中...",
+    compressing: "写真を追加・保存中...",
     saveBtn: "情報を保存して次のスキャンへ",
     saving: "保存中...",
     close: "✕ 閉じる",
@@ -54,8 +61,8 @@ const dictionary = {
     prevImg: "← 前の画像",
     nextImg: "次の画像 →",
     imgProgress: "画像 {current} / {total}",
-    uploadingMsg: "画像を圧縮・送信中...",
-    uploadSuccess: "画像を追加しました",
+    uploadingMsg: "画像を圧縮・保存中...",
+    uploadSuccess: "画像を追加し、端末へ保存しました",
     saveSuccess: "シーケンス「{seq}」の情報を保存しました",
     scanError: "カメラ起動エラー",
     dataError: "データ読込エラー",
@@ -71,6 +78,8 @@ const dictionary = {
     searchBySeq: "Direct Sequence Spec (Test)",
     searchByFedex: "Search by FEDEX Tracking No.",
     searchBtn: "Search",
+    searchResultsTitle: "Search Results",
+    noResults: "No matching shipping data found",
     seqLabel: "Target Sequence",
     editHeader: "Registration & Edit Info",
     readOnlyStatus: "🔒 Read Only (Tracking Registered)",
@@ -84,7 +93,7 @@ const dictionary = {
     imagesLabel: "Product Images",
     imgCount: "Total: {count} photo(s)",
     addPhotosBtn: "📷 Add / Take Photos",
-    compressing: "Compressing & Uploading...",
+    compressing: "Compressing & Saving...",
     saveBtn: "Save Information & Next Scan",
     saving: "Saving...",
     close: "✕ Close",
@@ -92,8 +101,8 @@ const dictionary = {
     prevImg: "← Previous",
     nextImg: "Next →",
     imgProgress: "Image {current} / {total}",
-    uploadingMsg: "Compressing and uploading images...",
-    uploadSuccess: "Image(s) added successfully",
+    uploadingMsg: "Compressing and saving images...",
+    uploadSuccess: "Images added and saved to device",
     saveSuccess: "Saved sequence '{seq}' successfully",
     scanError: "Camera Start Error",
     dataError: "Data Load Error",
@@ -109,6 +118,8 @@ const dictionary = {
     searchBySeq: "ระบุ Sequence โดยตรง (ทดสอบ)",
     searchByFedex: "ค้นหาด้วยหมายเลข FEDEX Tracking",
     searchBtn: "ค้นหา",
+    searchResultsTitle: "ผลการค้นหา",
+    noResults: "ไม่พบข้อมูลการจัดส่งที่ตรงกัน",
     seqLabel: "Sequence เป้าหมาย",
     editHeader: "ข้อมูลการลงทะเบียนและแก้ไข",
     readOnlyStatus: "🔒 อ่านอย่างเดียว (ลงทะเบียนพัสดุแล้ว)",
@@ -122,7 +133,7 @@ const dictionary = {
     imagesLabel: "รูปภาพสินค้า",
     imgCount: "จำนวนที่ลงทะเบียน: {count} ภาพ",
     addPhotosBtn: "📷 เพิ่ม / ถ่ายภาพ (หลายภาพได้)",
-    compressing: "กำลังบีบอัดและอัปโหลด...",
+    compressing: "กำลังบีบอัดและบันทึก...",
     saveBtn: "บันทึกข้อมูลและไปสแกนถัดไป",
     saving: "กำลังบันทึก...",
     close: "✕ ปิด",
@@ -131,7 +142,7 @@ const dictionary = {
     nextImg: "ภาพถัดไป →",
     imgProgress: "ภาพที่ {current} / {total}",
     uploadingMsg: "กำลังบีบอัดและส่งรูปภาพ...",
-    uploadSuccess: "เพิ่มรูปภาพเรียบร้อยแล้ว",
+    uploadSuccess: "เพิ่มและบันทึกรูปภาพลงในเครื่องเรียบร้อยแล้ว",
     saveSuccess: "บันทึกข้อมูล Sequence '{seq}' เรียบร้อยแล้ว",
     scanError: "เกิดข้อผิดพลาดในการเปิดกล้อง",
     dataError: "เกิดข้อผิดพลาดในการโหลดข้อมูล",
@@ -146,6 +157,7 @@ export default function ShippingManagementApp() {
   const [mode, setMode] = useState<"scanner" | "detail">("scanner");
   const [seqNo, setSeqNo] = useState<string>("");
   const [fedexSearchInput, setFedexSearchInput] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<SearchResultItem[] | null>(null);
 
   // 詳細画面用ステート
   const [isLocked, setIsLocked] = useState<boolean>(false);
@@ -172,7 +184,6 @@ export default function ShippingManagementApp() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // ズーム操作用コールバック
   const onUpdateZoom = useCallback(({ x, y, scale }: { x: number; y: number; scale: number }) => {
     const { current: img } = imgRef;
     if (img) {
@@ -181,9 +192,7 @@ export default function ShippingManagementApp() {
     }
   }, []);
 
-  // ----------------------------------------------------
   // QRスキャナー制御
-  // ----------------------------------------------------
   const startScanner = async () => {
     setIsScanning(true);
     setMessage("");
@@ -231,9 +240,7 @@ export default function ShippingManagementApp() {
     setIsScanning(false);
   };
 
-  // ----------------------------------------------------
-  // シーケンス詳細データロード（Seq または FEDEX No）
-  // ----------------------------------------------------
+  // シーケンス詳細データロード
   const handleSelectSeq = async (targetSeq: string) => {
     setSeqNo(targetSeq);
     setLoading(true);
@@ -262,7 +269,7 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // FEDEX Tracking No で直接検索する処理
+  // FEDEX 追跡番号での検索（リストカード表示）
   const handleSearchByFedex = async () => {
     if (!fedexSearchInput.trim()) return;
     setLoading(true);
@@ -272,8 +279,12 @@ export default function ShippingManagementApp() {
       const res = await fetch(`/api/shipping?fedex=${encodeURIComponent(fedexSearchInput.trim())}`);
       const data = await res.json();
 
-      if (res.ok && data.seqNo) {
-        handleSelectSeq(data.seqNo);
+      if (res.ok && data.results) {
+        setSearchResults(data.results);
+        // カード用のサムネイルURLをあらかじめ取得
+        data.results.forEach((item: SearchResultItem) => {
+          if (item.thumbnail) fetchPreviewUrl(item.thumbnail);
+        });
       } else {
         setMessage(t.dataError);
       }
@@ -298,7 +309,6 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // 新規顧客追加
   const handleAddCustomer = async () => {
     if (!customerName.trim()) return;
     const res = await fetch("/api/customers", {
@@ -311,54 +321,52 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // ----------------------------------------------------
-  // デバッグログ付き 画像アップロード処理
-  // ----------------------------------------------------
+  // 端末ダウンロード（保存）補助関数
+  const downloadToDevice = (fileBlob: Blob, filename: string) => {
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(fileBlob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error("Device download error:", e);
+    }
+  };
+
+  // 複数画像自動圧縮＆端末保存＆アップロード
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    console.log("📸 [Frontend] File input triggered. Files length:", files?.length);
-
-    if (!files || files.length === 0 || isLocked) {
-      console.log("📸 [Frontend] Upload skipped (no files or locked)");
-      return;
-    }
+    if (!files || files.length === 0 || isLocked) return;
 
     setUploading(true);
-    setMessage("画像を処理中...");
+    setMessage(t.uploadingMsg);
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      console.log(`📸 [Frontend] Processing file #${i + 1}:`, file.name, `(${file.size} bytes)`);
-
       try {
-        // ① 圧縮開始
-        console.log("📸 [Frontend] Starting compression...");
         const compressed = await imageCompression(file, {
           maxSizeMB: 1,
           maxWidthOrHeight: 1920,
           useWebWorker: true,
         });
-        console.log("📸 [Frontend] Compression complete. Compressed size:", compressed.size);
 
-        // ② Blob URL生成
+        // 端末のダウンロードフォルダーへ直接保存処理を発行
+        downloadToDevice(compressed, `TMS_${seqNo}_${Date.now()}.jpg`);
+
         const localBlobUrl = URL.createObjectURL(compressed);
-        console.log("📸 [Frontend] Local Blob URL created:", localBlobUrl);
 
-        // ③ FormData作成
         const formData = new FormData();
         formData.append("file", compressed, file.name);
         formData.append("seq_no", seqNo);
 
-        // ④ Fetch送信
-        console.log("📸 [Frontend] Sending fetch request to /api/upload...");
         const res = await fetch("/api/upload", {
           method: "POST",
           body: formData,
         });
 
-        console.log("📸 [Frontend] Response status:", res.status, res.statusText);
         const uploadData = await res.json();
-        console.log("📸 [Frontend] Response JSON:", uploadData);
 
         if (res.ok) {
           const newImgItem: ImageItem = {
@@ -367,29 +375,19 @@ export default function ShippingManagementApp() {
             previewUrl: localBlobUrl,
           };
 
-          setImages((prev) => {
-            const updated = [...prev, newImgItem];
-            console.log("📸 [Frontend] Updated images state count:", updated.length);
-            return updated;
-          });
-
+          setImages((prev) => [...prev, newImgItem]);
           setPreviewUrls((prev) => ({
             ...prev,
             [newImgItem.file_name]: localBlobUrl,
           }));
-
-          setMessage(`✅ [${i + 1}/${files.length}] アップロード成功: ${file.name}`);
-        } else {
-          console.error("📸 [Frontend] API Returned Error:", uploadData);
-          setMessage(`❌ サーバーエラー: ${uploadData.error || "失敗しました"}`);
         }
-      } catch (err: any) {
-        console.error("📸 [Frontend] Exception during upload:", err);
-        setMessage(`❌ 例外エラー: ${err?.message || JSON.stringify(err)}`);
+      } catch (err) {
+        console.error("Upload error:", err);
       }
     }
 
     setUploading(false);
+    setMessage(t.uploadSuccess);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -409,7 +407,7 @@ export default function ShippingManagementApp() {
     return null;
   };
 
-  // 出荷情報の保存
+  // 保存処理
   const handleSaveOrder = async () => {
     if (!seqNo) return;
     setLoading(true);
@@ -434,6 +432,7 @@ export default function ShippingManagementApp() {
         setCustomerName("");
         setFedexTrackingNo("");
         setImages([]);
+        setSearchResults(null);
       } else {
         setMessage(data.error || t.dataError);
       }
@@ -447,11 +446,10 @@ export default function ShippingManagementApp() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 w-full box-border overscroll-y-contain touch-manipulation overflow-x-hidden">
       <div className="max-w-md mx-auto w-full">
-        {/* ヘッダーナビ & 言語切り替え */}
+        {/* ヘッダー */}
         <header className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-3">
           <h1 className="text-xl font-black text-amber-500 tracking-wider">{t.title}</h1>
           <div className="flex items-center gap-2">
-            {/* 言語セレクター */}
             <select
               value={lang}
               onChange={(e) => setLang(e.target.value as Language)}
@@ -473,7 +471,7 @@ export default function ShippingManagementApp() {
           </div>
         </header>
 
-        {/* 通知メッセージ */}
+        {/* メッセージ */}
         {message && (
           <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs rounded-lg animate-pulse">
             {message}
@@ -482,8 +480,8 @@ export default function ShippingManagementApp() {
 
         {/* スキャン画面 */}
         {mode === "scanner" && (
-          <div className="space-y-6 text-center py-4 w-full">
-            <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl space-y-4 w-full box-border">
+          <div className="space-y-5 text-center py-2 w-full">
+            <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl space-y-4 w-full box-border">
               <h2 className="text-lg font-bold">{t.scanHeader}</h2>
               <p className="text-xs text-zinc-400">{t.scanDesc}</p>
 
@@ -507,7 +505,7 @@ export default function ShippingManagementApp() {
               )}
             </div>
 
-            {/* FEDEX 追跡番号での検索フォーム */}
+            {/* FEDEX 追跡番号での検索 */}
             <div className="p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl space-y-2 text-left w-full box-border">
               <label className="text-xs text-zinc-400 font-bold">{t.searchByFedex}</label>
               <div className="flex gap-2">
@@ -527,6 +525,67 @@ export default function ShippingManagementApp() {
                 </button>
               </div>
             </div>
+
+            {/* ★ FEDEX 検索結果のカード形式×縦型リスト表示 */}
+            {searchResults !== null && (
+              <div className="space-y-3 text-left pt-2">
+                <h3 className="text-xs font-bold text-zinc-400 tracking-wider">
+                  {t.searchResultsTitle} ({searchResults.length}件)
+                </h3>
+
+                {searchResults.length === 0 ? (
+                  <p className="text-xs text-zinc-500 p-4 bg-zinc-900/40 rounded-xl border border-zinc-800/40 text-center">
+                    {t.noResults}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {searchResults.map((item) => (
+                      <div
+                        key={item.seq_no}
+                        onClick={() => handleSelectSeq(item.seq_no)}
+                        className="p-3 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition active:scale-98 shadow-md"
+                      >
+                        {/* 1. サムネイル画像 */}
+                        <div className="w-14 h-14 bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                          {item.thumbnail && previewUrls[item.thumbnail] ? (
+                            <img
+                              src={previewUrls[item.thumbnail]}
+                              alt="thumbnail"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-zinc-600">No Image</span>
+                          )}
+                        </div>
+
+                        {/* 2. シーケンス・顧客名・FEDEX番号 */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-extrabold font-mono text-amber-400">
+                              {item.seq_no}
+                            </span>
+                            {item.isLocked && (
+                              <span className="text-[10px] px-2 py-0.5 bg-rose-500/20 text-rose-400 rounded-full font-bold">
+                                🔒 ロック済
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-zinc-200 font-bold truncate mt-0.5">
+                            {item.customer_name || "(顧客名未登録)"}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 font-mono truncate">
+                            {item.fedex_tracking_no}
+                          </p>
+                        </div>
+
+                        {/* 3. 矢印アイコン */}
+                        <span className="text-zinc-600 text-sm font-bold">→</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 直接シーケンス指定 */}
             <div className="p-4 bg-zinc-900/30 border border-zinc-800/30 rounded-xl space-y-2 text-left w-full box-border">
@@ -702,15 +761,12 @@ export default function ShippingManagementApp() {
         )}
       </div>
 
-      {/* ======================================================== */}
-      {/* 閉じるUI向上モーダル（背景タップ閉じる機能付き）         */}
-      {/* ======================================================== */}
+      {/* ズームプレビューモーダル */}
       {previewIndex !== null && images[previewIndex] && (
         <div
           onClick={() => setPreviewIndex(null)}
           className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 backdrop-blur-md cursor-pointer select-none"
         >
-          {/* ヘッダー */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex justify-between items-center text-zinc-300 z-20 pb-2 border-b border-zinc-800/80"
@@ -731,7 +787,6 @@ export default function ShippingManagementApp() {
             </button>
           </div>
 
-          {/* ズーム領域（イベントバブリング阻止でズーム操作時の離脱を防ぐ） */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex-1 w-full h-full my-2 overflow-hidden flex items-center justify-center relative z-10"
@@ -750,7 +805,6 @@ export default function ShippingManagementApp() {
             )}
           </div>
 
-          {/* フッターナビ */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex justify-between items-center gap-4 z-20 pt-2 border-t border-zinc-800/80"

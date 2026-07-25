@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryD1 } from "@/lib/d1";
 
-// シーケンス情報（またはFEDEX追跡番号）からのデータ取得
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    let seq = searchParams.get("seq");
+    const seq = searchParams.get("seq");
     const fedex = searchParams.get("fedex");
 
-    // seq も fedex も指定されていない場合は 400
     if (!seq && !fedex) {
       return NextResponse.json(
         { error: "シーケンス番号(?seq=) または FEDEX追跡番号(?fedex=) が必要です" },
@@ -16,25 +14,53 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // FEDEX 追跡番号から検索された場合、まず該当する seq_no を取得
-    if (!seq && fedex) {
-      const fedexRaw = await queryD1(
-        `SELECT seq_no FROM shipping_orders WHERE fedex_tracking_no = ?`,
-        [fedex.trim()]
+    // ----------------------------------------------------
+    // FEDEX 追跡番号検索（複数件カードリスト対応）
+    // ----------------------------------------------------
+    if (fedex) {
+      const orderRaw = await queryD1(
+        `SELECT * FROM shipping_orders WHERE fedex_tracking_no LIKE ? ORDER BY updated_at DESC`,
+        [`%${fedex.trim()}%`]
       );
-      const fedexRows = fedexRaw?.result?.[0]?.results?.rows || fedexRaw?.rows || [];
+      const orderRows = orderRaw?.result?.[0]?.results?.rows || orderRaw?.rows || [];
+      const orderCols = orderRaw?.result?.[0]?.results?.columns || orderRaw?.columns || [];
 
-      if (fedexRows.length === 0) {
-        return NextResponse.json(
-          { error: "指定されたFEDEX追跡番号に該当するデータが見つかりません" },
-          { status: 404 }
-        );
+      if (orderRows.length === 0) {
+        return NextResponse.json({ results: [] });
       }
 
-      seq = String(fedexRows[0][0]);
+      // 該当する全 Order と、それぞれの代表サムネイル画像を取得
+      const results = await Promise.all(
+        orderRows.map(async (row: any[]) => {
+          const orderObj: Record<string, any> = {};
+          orderCols.forEach((col: string, idx: number) => {
+            orderObj[col] = row[idx];
+          });
+
+          // 各 Order の最新画像を1枚取得（サムネイル用）
+          const imgRaw = await queryD1(
+            `SELECT file_name FROM shipping_images WHERE seq_no = ? ORDER BY id DESC LIMIT 1`,
+            [orderObj.seq_no]
+          );
+          const imgRows = imgRaw?.result?.[0]?.results?.rows || imgRaw?.rows || [];
+          const thumbFileName = imgRows.length > 0 ? imgRows[0][0] : null;
+
+          return {
+            seq_no: orderObj.seq_no,
+            customer_name: orderObj.customer_name || "",
+            fedex_tracking_no: orderObj.fedex_tracking_no || "",
+            thumbnail: thumbFileName,
+            isLocked: Boolean(orderObj.fedex_tracking_no && String(orderObj.fedex_tracking_no).trim() !== ""),
+          };
+        })
+      );
+
+      return NextResponse.json({ results });
     }
 
-    // 1. Order情報の取得
+    // ----------------------------------------------------
+    // 単一 シーケンス番号 詳細取得
+    // ----------------------------------------------------
     const orderRaw = await queryD1(`SELECT * FROM shipping_orders WHERE seq_no = ?`, [seq]);
     const orderRows = orderRaw?.result?.[0]?.results?.rows || orderRaw?.rows || [];
     const orderCols = orderRaw?.result?.[0]?.results?.columns || orderRaw?.columns || [];
@@ -48,7 +74,6 @@ export async function GET(req: NextRequest) {
       order = orderObj;
     }
 
-    // 2. 関連画像一覧の取得
     const imgRaw = await queryD1(`SELECT * FROM shipping_images WHERE seq_no = ? ORDER BY id DESC`, [seq]);
     const imgRows = imgRaw?.result?.[0]?.results?.rows || imgRaw?.rows || [];
     const imgCols = imgRaw?.result?.[0]?.results?.columns || imgRaw?.columns || [];
@@ -61,7 +86,6 @@ export async function GET(req: NextRequest) {
       return item;
     });
 
-    // FEDEX tracking_no があればロック（閲覧のみ）
     const isLocked = Boolean(order?.fedex_tracking_no && String(order.fedex_tracking_no).trim() !== "");
 
     return NextResponse.json({
@@ -77,7 +101,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 出荷情報の保存・ロック
 export async function POST(req: NextRequest) {
   try {
     const { seq_no, customer_name, fedex_tracking_no } = await req.json();
@@ -86,14 +109,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "シーケンス番号が必要です" }, { status: 400 });
     }
 
-    // すでにロックされているか確認
     const checkRaw = await queryD1(`SELECT fedex_tracking_no FROM shipping_orders WHERE seq_no = ?`, [seq_no]);
     const checkRows = checkRaw?.result?.[0]?.results?.rows || checkRaw?.rows || [];
     if (checkRows.length > 0 && checkRows[0][0]) {
       return NextResponse.json({ error: "このデータはすでにロックされているため編集できません" }, { status: 403 });
     }
 
-    // 保存または更新（UPSERT）
     await queryD1(
       `INSERT INTO shipping_orders (seq_no, customer_name, fedex_tracking_no, updated_at) 
        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
