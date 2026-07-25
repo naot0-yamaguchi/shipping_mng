@@ -54,24 +54,22 @@ export default function ShippingManagementApp() {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
-          // QRコード解析 (例: https://domain?seq=SEQ123 などのURLからseqを取得)
           let extractedSeq = decodedText;
           try {
             const url = new URL(decodedText);
             const param = url.searchParams.get("seq");
             if (param) extractedSeq = param;
-          } catch (e) {
-            // URL形式でない場合はそのまま文字列を使用
-          }
+          } catch (e) {}
 
           stopScanner();
           handleSelectSeq(extractedSeq);
         },
         () => {}
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setMessage("カメラの起動に失敗しました");
+      // ★ エラーの具体的な内容（NotAllowedError や NotFoundError など）を画面に表示
+      setMessage(`カメラ起動エラー: ${err?.name || ''} - ${err?.message || JSON.stringify(err)}`);
       setIsScanning(false);
     }
   };
