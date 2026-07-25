@@ -62,11 +62,15 @@ const dictionary = {
     nextImg: "次の画像 →",
     imgProgress: "画像 {current} / {total}",
     uploadingMsg: "画像を圧縮・保存中...",
-    uploadSuccess: "画像を追加し、端末へ保存しました",
+    uploadSuccess: "画像を追加しました",
     saveSuccess: "シーケンス「{seq}」の情報を保存しました",
     scanError: "カメラ起動エラー",
     dataError: "データ読込エラー",
     networkError: "通信エラーが発生しました",
+    deleteConfirm: "この画像を削除してもよろしいですか？",
+    deleteSuccess: "画像を削除しました",
+    deleteError: "画像の削除に失敗しました",
+    deleteBtn: "🗑️ 削除",
   },
   en: {
     title: "TMS APP",
@@ -102,11 +106,15 @@ const dictionary = {
     nextImg: "Next →",
     imgProgress: "Image {current} / {total}",
     uploadingMsg: "Compressing and saving images...",
-    uploadSuccess: "Images added and saved to device",
+    uploadSuccess: "Image added successfully",
     saveSuccess: "Saved sequence '{seq}' successfully",
     scanError: "Camera Start Error",
     dataError: "Data Load Error",
     networkError: "Network connection error",
+    deleteConfirm: "Are you sure you want to delete this image?",
+    deleteSuccess: "Image deleted successfully",
+    deleteError: "Failed to delete image",
+    deleteBtn: "🗑️ Delete",
   },
   th: {
     title: "TMS APP",
@@ -142,11 +150,15 @@ const dictionary = {
     nextImg: "ภาพถัดไป →",
     imgProgress: "ภาพที่ {current} / {total}",
     uploadingMsg: "กำลังบีบอัดและส่งรูปภาพ...",
-    uploadSuccess: "เพิ่มและบันทึกรูปภาพลงในเครื่องเรียบร้อยแล้ว",
+    uploadSuccess: "เพิ่มรูปภาพเรียบร้อยแล้ว",
     saveSuccess: "บันทึกข้อมูล Sequence '{seq}' เรียบร้อยแล้ว",
     scanError: "เกิดข้อผิดพลาดในการเปิดกล้อง",
     dataError: "เกิดข้อผิดพลาดในการโหลดข้อมูล",
     networkError: "เกิดข้อผิดพลาดในการเชื่อมต่อ",
+    deleteConfirm: "คุณแน่ใจหรือไม่ว่าต้องการลบรูปภาพนี้?",
+    deleteSuccess: "ลบรูปภาพเรียบร้อยแล้ว",
+    deleteError: "ไม่สามารถลบรูปภาพได้",
+    deleteBtn: "🗑️ ลบ",
   },
 };
 
@@ -269,7 +281,7 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // FEDEX 追跡番号での検索（リストカード表示）
+  // FEDEX 追跡番号での検索
   const handleSearchByFedex = async () => {
     if (!fedexSearchInput.trim()) return;
     setLoading(true);
@@ -281,7 +293,6 @@ export default function ShippingManagementApp() {
 
       if (res.ok && data.results) {
         setSearchResults(data.results);
-        // カード用のサムネイルURLをあらかじめ取得
         data.results.forEach((item: SearchResultItem) => {
           if (item.thumbnail) fetchPreviewUrl(item.thumbnail);
         });
@@ -321,21 +332,7 @@ export default function ShippingManagementApp() {
     }
   };
 
-  // 端末ダウンロード（保存）補助関数
-  const downloadToDevice = (fileBlob: Blob, filename: string) => {
-    try {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(fileBlob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e) {
-      console.error("Device download error:", e);
-    }
-  };
-
-  // 複数画像自動圧縮＆端末保存＆アップロード
+  // 画像アップロード
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || isLocked) return;
@@ -351,9 +348,6 @@ export default function ShippingManagementApp() {
           maxWidthOrHeight: 1920,
           useWebWorker: true,
         });
-
-        // 端末のダウンロードフォルダーへ直接保存処理を発行
-        downloadToDevice(compressed, `TMS_${seqNo}_${Date.now()}.jpg`);
 
         const localBlobUrl = URL.createObjectURL(compressed);
 
@@ -389,6 +383,34 @@ export default function ShippingManagementApp() {
     setUploading(false);
     setMessage(t.uploadSuccess);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // 画像削除処理
+  const handleDeleteImage = async (fileName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // サムネイルクリックでのズーム起動を防止
+
+    if (!window.confirm(t.deleteConfirm)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/upload?file_name=${encodeURIComponent(fileName)}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setMessage(t.deleteSuccess);
+        // ステートから該当画像を削除
+        setImages((prev) => prev.filter((img) => img.file_name !== fileName));
+        if (previewIndex !== null) setPreviewIndex(null); // モーダルを閉じる
+      } else {
+        setMessage(t.deleteError);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage(t.deleteError);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 画像URL取得
@@ -526,7 +548,7 @@ export default function ShippingManagementApp() {
               </div>
             </div>
 
-            {/* ★ FEDEX 検索結果のカード形式×縦型リスト表示 */}
+            {/* FEDEX 検索結果 */}
             {searchResults !== null && (
               <div className="space-y-3 text-left pt-2">
                 <h3 className="text-xs font-bold text-zinc-400 tracking-wider">
@@ -545,7 +567,6 @@ export default function ShippingManagementApp() {
                         onClick={() => handleSelectSeq(item.seq_no)}
                         className="p-3 bg-zinc-900 hover:bg-zinc-800/80 border border-zinc-800 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition active:scale-98 shadow-md"
                       >
-                        {/* 1. サムネイル画像 */}
                         <div className="w-14 h-14 bg-zinc-800 rounded-lg border border-zinc-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
                           {item.thumbnail && previewUrls[item.thumbnail] ? (
                             <img
@@ -558,7 +579,6 @@ export default function ShippingManagementApp() {
                           )}
                         </div>
 
-                        {/* 2. シーケンス・顧客名・FEDEX番号 */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-extrabold font-mono text-amber-400">
@@ -578,7 +598,6 @@ export default function ShippingManagementApp() {
                           </p>
                         </div>
 
-                        {/* 3. 矢印アイコン */}
                         <span className="text-zinc-600 text-sm font-bold">→</span>
                       </div>
                     ))}
@@ -715,7 +734,7 @@ export default function ShippingManagementApp() {
                   </div>
                 )}
 
-                {/* サムネイル一覧 */}
+                {/* サムネイル一覧（削除ボタン追加） */}
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   {images.map((img, idx) => {
                     const src = img.previewUrl || previewUrls[img.file_name];
@@ -737,9 +756,23 @@ export default function ShippingManagementApp() {
                         ) : (
                           <span className="text-[10px] text-zinc-500 p-1 text-center">...</span>
                         )}
-                        <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded">
+
+                        {/* 番号ラベル */}
+                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded">
                           #{idx + 1}
                         </span>
+
+                        {/* 🗑️ 削除ボタン (ロックされていない場合のみ) */}
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteImage(img.file_name, e)}
+                            className="absolute top-1 right-1 bg-rose-600/90 hover:bg-rose-600 text-white p-1 rounded-md text-[10px] font-bold shadow transition active:scale-90"
+                            title="削除"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -761,12 +794,13 @@ export default function ShippingManagementApp() {
         )}
       </div>
 
-      {/* ズームプレビューモーダル */}
+      {/* ズームプレビューモーダル（削除ボタン追加） */}
       {previewIndex !== null && images[previewIndex] && (
         <div
           onClick={() => setPreviewIndex(null)}
           className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 backdrop-blur-md cursor-pointer select-none"
         >
+          {/* ヘッダー */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex justify-between items-center text-zinc-300 z-20 pb-2 border-b border-zinc-800/80"
@@ -779,14 +813,28 @@ export default function ShippingManagementApp() {
               </span>
               <span className="text-[10px] text-zinc-500 block">{t.tapBackgroundToClose}</span>
             </div>
-            <button
-              onClick={() => setPreviewIndex(null)}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full text-xs font-extrabold shadow-lg transition active:scale-95"
-            >
-              {t.close}
-            </button>
+
+            <div className="flex items-center gap-2">
+              {/* モーダル内 削除ボタン */}
+              {!isLocked && (
+                <button
+                  onClick={() => handleDeleteImage(images[previewIndex].file_name)}
+                  className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-full text-xs font-bold transition active:scale-95"
+                >
+                  {t.deleteBtn}
+                </button>
+              )}
+
+              <button
+                onClick={() => setPreviewIndex(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs font-extrabold shadow-lg transition active:scale-95"
+              >
+                {t.close}
+              </button>
+            </div>
           </div>
 
+          {/* ズーム表示 */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex-1 w-full h-full my-2 overflow-hidden flex items-center justify-center relative z-10"
@@ -805,6 +853,7 @@ export default function ShippingManagementApp() {
             )}
           </div>
 
+          {/* フッター */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="flex justify-between items-center gap-4 z-20 pt-2 border-t border-zinc-800/80"
