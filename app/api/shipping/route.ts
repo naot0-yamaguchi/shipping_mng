@@ -16,12 +16,14 @@ export async function GET(req: NextRequest) {
     const orderRows = orderRaw?.result?.[0]?.results?.rows || orderRaw?.rows || [];
     const orderCols = orderRaw?.result?.[0]?.results?.columns || orderRaw?.columns || [];
 
-    let order = null;
+    // 型を Record<string, any> | null として明示定義
+    let order: Record<string, any> | null = null;
     if (orderRows.length > 0) {
-      order = {};
+      const orderObj: Record<string, any> = {};
       orderCols.forEach((col: string, idx: number) => {
-        order[col] = orderRows[0][idx];
+        orderObj[col] = orderRows[0][idx];
       });
+      order = orderObj;
     }
 
     // 2. 関連画像一覧の取得
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
     });
 
     // FEDEX tracking_no があればロック（閲覧のみ）
-    const isLocked = Boolean(order?.fedex_tracking_no && order.fedex_tracking_no.trim() !== "");
+    const isLocked = Boolean(order?.fedex_tracking_no && String(order.fedex_tracking_no).trim() !== "");
 
     return NextResponse.json({
       seq_no: seq,
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
       isLocked,
     });
   } catch (error) {
+    console.error("Fetch Shipping Error:", error);
     return NextResponse.json({ error: "データ取得エラー" }, { status: 500 });
   }
 }
@@ -80,6 +83,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("Save Shipping Error:", error);
     return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
   }
 }
