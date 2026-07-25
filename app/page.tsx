@@ -57,7 +57,6 @@ const dictionary = {
     saveBtn: "情報を保存して次のスキャンへ",
     saving: "保存中...",
     close: "✕ 閉じる",
-    tapBackgroundToClose: "※背景タップでも閉じます",
     prevImg: "← 前の画像",
     nextImg: "次の画像 →",
     imgProgress: "画像 {current} / {total}",
@@ -101,7 +100,6 @@ const dictionary = {
     saveBtn: "Save Information & Next Scan",
     saving: "Saving...",
     close: "✕ Close",
-    tapBackgroundToClose: "※ Tap background to close",
     prevImg: "← Previous",
     nextImg: "Next →",
     imgProgress: "Image {current} / {total}",
@@ -145,7 +143,6 @@ const dictionary = {
     saveBtn: "บันทึกข้อมูลและไปสแกนถัดไป",
     saving: "กำลังบันทึก...",
     close: "✕ ปิด",
-    tapBackgroundToClose: "※ แตะพื้นที่ว่างเพื่อปิด",
     prevImg: "← ภาพก่อนหน้า",
     nextImg: "ภาพถัดไป →",
     imgProgress: "ภาพที่ {current} / {total}",
@@ -387,7 +384,7 @@ export default function ShippingManagementApp() {
 
   // 画像削除処理
   const handleDeleteImage = async (fileName: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation(); // サムネイルクリックでのズーム起動を防止
+    if (e) e.stopPropagation();
 
     if (!window.confirm(t.deleteConfirm)) return;
 
@@ -399,9 +396,8 @@ export default function ShippingManagementApp() {
 
       if (res.ok) {
         setMessage(t.deleteSuccess);
-        // ステートから該当画像を削除
         setImages((prev) => prev.filter((img) => img.file_name !== fileName));
-        if (previewIndex !== null) setPreviewIndex(null); // モーダルを閉じる
+        if (previewIndex !== null) setPreviewIndex(null);
       } else {
         setMessage(t.deleteError);
       }
@@ -734,7 +730,7 @@ export default function ShippingManagementApp() {
                   </div>
                 )}
 
-                {/* サムネイル一覧（削除ボタン追加） */}
+                {/* サムネイル一覧 */}
                 <div className="grid grid-cols-3 gap-2 pt-2">
                   {images.map((img, idx) => {
                     const src = img.previewUrl || previewUrls[img.file_name];
@@ -757,12 +753,10 @@ export default function ShippingManagementApp() {
                           <span className="text-[10px] text-zinc-500 p-1 text-center">...</span>
                         )}
 
-                        {/* 番号ラベル */}
                         <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded">
                           #{idx + 1}
                         </span>
 
-                        {/* 🗑️ 削除ボタン (ロックされていない場合のみ) */}
                         {!isLocked && (
                           <button
                             type="button"
@@ -794,28 +788,23 @@ export default function ShippingManagementApp() {
         )}
       </div>
 
-      {/* ズームプレビューモーダル（削除ボタン追加） */}
+      {/* ======================================================== */}
+      {/* 🚀 ズーム・拡大プレビューモーダル (レイアウト完全分離版)   */}
+      {/* ======================================================== */}
       {previewIndex !== null && images[previewIndex] && (
-        <div
-          onClick={() => setPreviewIndex(null)}
-          className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 backdrop-blur-md cursor-pointer select-none"
-        >
-          {/* ヘッダー */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex justify-between items-center text-zinc-300 z-20 pb-2 border-b border-zinc-800/80"
-          >
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between overflow-hidden select-none">
+          {/* 1. 最前面ヘッダー（絶対に動かない固定UI） */}
+          <div className="w-full bg-zinc-950/90 border-b border-zinc-800/80 px-4 py-3 flex justify-between items-center z-50 shadow-2xl backdrop-blur-md">
             <div>
               <span className="text-xs font-bold text-amber-400 block">
                 {t.imgProgress
                   .replace("{current}", String(previewIndex + 1))
                   .replace("{total}", String(images.length))}
               </span>
-              <span className="text-[10px] text-zinc-500 block">{t.tapBackgroundToClose}</span>
             </div>
 
             <div className="flex items-center gap-2">
-              {/* モーダル内 削除ボタン */}
+              {/* 削除ボタン */}
               {!isLocked && (
                 <button
                   onClick={() => handleDeleteImage(images[previewIndex].file_name)}
@@ -825,43 +814,46 @@ export default function ShippingManagementApp() {
                 </button>
               )}
 
+              {/* 🎯 完全固定の閉じるボタン */}
               <button
                 onClick={() => setPreviewIndex(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full text-xs font-extrabold shadow-lg transition active:scale-95"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-white rounded-full text-xs font-black shadow-xl transition active:scale-95"
               >
                 {t.close}
               </button>
             </div>
           </div>
 
-          {/* ズーム表示 */}
+          {/* 2. 中央ズーム操作領域（分離キャンバス） */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 w-full h-full my-2 overflow-hidden flex items-center justify-center relative z-10"
+            className="flex-1 w-full h-full relative overflow-hidden flex items-center justify-center z-10 my-1"
+            onClick={() => setPreviewIndex(null)} // 背景タップ閉じる
           >
-            {images[previewIndex].previewUrl || previewUrls[images[previewIndex].file_name] ? (
-              <QuickPinchZoom onUpdate={onUpdateZoom} maxZoom={5}>
-                <img
-                  ref={imgRef}
-                  src={images[previewIndex].previewUrl || previewUrls[images[previewIndex].file_name]}
-                  alt="Zoom Preview"
-                  className="max-h-[70vh] max-w-full object-contain rounded-lg shadow-2xl"
-                />
-              </QuickPinchZoom>
-            ) : (
-              <span className="text-zinc-400 text-xs">Loading...</span>
-            )}
+            <div
+              className="w-full h-full flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()} // 画像操作時の背景タップイベント伝播防止
+            >
+              {images[previewIndex].previewUrl || previewUrls[images[previewIndex].file_name] ? (
+                <QuickPinchZoom onUpdate={onUpdateZoom} maxZoom={5}>
+                  <img
+                    ref={imgRef}
+                    src={images[previewIndex].previewUrl || previewUrls[images[previewIndex].file_name]}
+                    alt="Zoom Preview"
+                    className="max-h-[75vh] max-w-full object-contain shadow-2xl rounded-sm"
+                  />
+                </QuickPinchZoom>
+              ) : (
+                <span className="text-zinc-400 text-xs">Loading...</span>
+              )}
+            </div>
           </div>
 
-          {/* フッター */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex justify-between items-center gap-4 z-20 pt-2 border-t border-zinc-800/80"
-          >
+          {/* 3. 最前面フッター（絶対に動かない固定UI） */}
+          <div className="w-full bg-zinc-950/90 border-t border-zinc-800/80 px-4 py-3 flex justify-between items-center gap-4 z-50 backdrop-blur-md">
             <button
               disabled={previewIndex === 0}
               onClick={() => setPreviewIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none"
+              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition"
             >
               {t.prevImg}
             </button>
@@ -870,7 +862,7 @@ export default function ShippingManagementApp() {
               onClick={() =>
                 setPreviewIndex((prev) => (prev !== null && prev < images.length - 1 ? prev + 1 : prev))
               }
-              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none"
+              className="flex-1 py-3 bg-zinc-800 text-white text-xs font-bold rounded-xl disabled:opacity-30 disabled:pointer-events-none active:scale-95 transition"
             >
               {t.nextImg}
             </button>
