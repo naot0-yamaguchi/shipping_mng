@@ -4,10 +4,15 @@ import { queryD1 } from '@/lib/d1';
 
 export async function POST(request: Request) {
   try {
-    const { count = 100, printerIp = '192.168.1.100' } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { count = 100 } = body;
 
-    if (!printerIp) {
-      return NextResponse.json({ success: false, message: 'プリンターIPが指定されていません' }, { status: 400 });
+    // 環境変数からグローバルIPとポートを取得。設定がない場合はリクエストボディやデフォルト値を使用
+    const host = process.env.PRINTER_HOST || body.printerIp || '192.168.1.100';
+    const port = Number(process.env.PRINTER_PORT || body.printerPort || 9100);
+
+    if (!host) {
+      return NextResponse.json({ success: false, message: 'プリンターIP/ホストが指定されていません' }, { status: 400 });
     }
 
     // 1. D1から現在の自動採番カウントを取得
@@ -48,8 +53,8 @@ export async function POST(request: Request) {
       tsplCommand += `PRINT 1,1\n`;
     }
 
-    // 3. プリンターへTCP送信
-    const printResult = await sendToPrinter(printerIp, 9100, tsplCommand);
+    // 3. プリンターへTCP送信（環境変数で指定したポートへ送信）
+    const printResult = await sendToPrinter(host, port, tsplCommand);
 
     // プリンター送信結果の判定部分
     if (printResult.success) {
@@ -58,7 +63,6 @@ export async function POST(request: Request) {
         message: `${startNum}〜${endNum} (${count}枚) の発行コマンドを送信しました` 
       });
     } else {
-      // 👇 ここで printResult.error (「プリンター接続タイムアウト」等) が message に渡ります
       return NextResponse.json(
         { success: false, message: printResult.error }, 
         { status: 500 }
