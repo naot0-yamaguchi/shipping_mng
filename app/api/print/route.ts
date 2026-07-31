@@ -11,6 +11,9 @@ export async function POST(request: Request) {
     const host = process.env.PRINTER_HOST || body.printerIp || '192.168.1.100';
     const port = Number(process.env.PRINTER_PORT || body.printerPort || 9100);
 
+    // デバッグ用（ターミナルログで実際にどの値が入っているか確認）
+    console.log(`[Print API] Connecting to ${host}:${port}`);
+
     if (!host) {
       return NextResponse.json({ success: false, message: 'プリンターIP/ホストが指定されていません' }, { status: 400 });
     }
