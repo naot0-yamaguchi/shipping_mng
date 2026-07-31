@@ -19,3 +19,5 @@ export type Customer = {
 };
 
 export type Language = "ja" | "en" | "th";
+
+export type ScanMode = "single" | "bulk_fedex";

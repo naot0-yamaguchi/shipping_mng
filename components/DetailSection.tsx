@@ -22,6 +22,7 @@ type Props = {
   onDeleteImage: (fileName: string, e?: React.MouseEvent) => void;
   onSaveOrder: () => void;
   loading: boolean;
+  onOpenBulkPrint?: () => void; // 🖨️ 一括印刷モーダル用のハンドラーを追加
 };
 
 export const DetailSection: React.FC<Props> = ({
@@ -45,12 +46,31 @@ export const DetailSection: React.FC<Props> = ({
   onDeleteImage,
   onSaveOrder,
   loading,
+  onOpenBulkPrint,
 }) => {
   return (
     <div className="space-y-4 w-full">
+      {/* 最上部：シーケンス番号 & QR一括印刷ボタン */}
       <div className="p-4 bg-white border border-stone-100 rounded-2xl flex items-center justify-between w-full shadow-sm box-border">
-        <span className="text-xs text-stone-400 font-bold tracking-wider">{t.seqLabel}</span>
-        <span className="text-xl font-black font-mono text-rose-500">{seqNo}</span>
+        <div>
+          <span className="text-xs text-stone-400 font-bold tracking-wider block">
+            {t.seqLabel}
+          </span>
+          <span className="text-xl font-black font-mono text-rose-500">
+            {seqNo}
+          </span>
+        </div>
+
+        {/* 🖨️ QRコード一括印刷ボタンの復元 */}
+        {onOpenBulkPrint && (
+          <button
+            type="button"
+            onClick={onOpenBulkPrint}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm active:scale-95"
+          >
+            🖨️ 一括印刷
+          </button>
+        )}
       </div>
 
       <div className="flex items-center justify-between px-1">
@@ -63,7 +83,9 @@ export const DetailSection: React.FC<Props> = ({
       <div className="p-5 bg-white border border-stone-100 rounded-3xl space-y-4 shadow-sm w-full box-border">
         {/* ① お客様名 */}
         <div className="relative space-y-1">
-          <label className="text-xs font-bold text-stone-600">{t.customerName}</label>
+          <label className="text-xs font-bold text-stone-600">
+            {t.customerName}
+          </label>
           <input
             type="text"
             value={customerName}
@@ -105,7 +127,9 @@ export const DetailSection: React.FC<Props> = ({
 
         {/* ② FEDEX Tracking No. */}
         <div className="space-y-1">
-          <label className="text-xs font-bold text-stone-600">{t.fedexLabel}</label>
+          <label className="text-xs font-bold text-stone-600">
+            {t.fedexLabel}
+          </label>
           <input
             type="text"
             value={fedexTrackingNo}
@@ -119,7 +143,8 @@ export const DetailSection: React.FC<Props> = ({
         <div className="space-y-3 pt-2 border-t border-stone-100">
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-stone-600">
-              {t.imagesLabel} ({t.imgCount.replace("{count}", String(images.length))})
+              {t.imagesLabel} (
+              {t.imgCount.replace("{count}", String(images.length))})
             </label>
           </div>
 
@@ -160,7 +185,9 @@ export const DetailSection: React.FC<Props> = ({
                       className="w-full h-full object-cover group-hover:scale-105 transition"
                     />
                   ) : (
-                    <span className="text-[10px] text-stone-400 p-1 text-center">...</span>
+                    <span className="text-[10px] text-stone-400 p-1 text-center">
+                      ...
+                    </span>
                   )}
 
                   <span className="absolute bottom-1 left-1 bg-stone-900/60 text-white text-[9px] px-1.5 py-0.5 rounded-md font-mono">

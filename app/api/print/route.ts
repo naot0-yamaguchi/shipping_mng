@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import net from 'net';
-import { db } from '@/lib/firebaseAdmin'; // ご自身のDB設定に合わせて適宜変更
+import { queryD1 } from '@/lib/d1';
 
 export async function POST(request: Request) {
   try {
@@ -10,22 +10,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: 'プリンターIPが指定されていません' }, { status: 400 });
     }
 
-    // 1. DBから現在の自動採番カウントを取得＆インクリメント（アトミック処理）
-    const counterRef = db.collection('counters').doc('tms_sequence');
-    
-    let startNum = 1;
-    let endNum = count;
+    // 1. D1から現在の自動採番カウントを取得
+    const rows = await queryD1(
+      `SELECT current_number FROM counters WHERE name = ?`,
+      ['tms_sequence']
+    );
 
-    await db.runTransaction(async (transaction) => {
-      const doc = await transaction.get(counterRef);
-      const current = doc.exists ? doc.data()?.current_number || 0 : 0;
-      
-      startNum = current + 1;
-      endNum = current + count;
+    const current = rows.length > 0 ? (rows[0].current_number as number) : 0;
+    const startNum = current + 1;
+    const endNum = current + count;
 
-      // DB側のカウントを更新
-      transaction.set(counterRef, { current_number: endNum }, { merge: true });
-    });
+    // DB側のカウントを更新 (レコードが存在しない場合は INSERT、存在する場合は UPDATE)
+    if (rows.length === 0) {
+      await queryD1(
+        `INSERT INTO counters (name, current_number) VALUES (?, ?)`,
+        ['tms_sequence', endNum]
+      );
+    } else {
+      await queryD1(
+        `UPDATE counters SET current_number = ? WHERE name = ?`,
+        [endNum, 'tms_sequence']
+      );
+    }
 
     // 2. 自動採番された番号（startNum 〜 endNum）でTSPLを組み立て
     let tsplCommand = '';
@@ -45,13 +51,18 @@ export async function POST(request: Request) {
     // 3. プリンターへTCP送信
     const printResult = await sendToPrinter(printerIp, 9100, tsplCommand);
 
+    // プリンター送信結果の判定部分
     if (printResult.success) {
       return NextResponse.json({ 
         success: true, 
         message: `${startNum}〜${endNum} (${count}枚) の発行コマンドを送信しました` 
       });
     } else {
-      return NextResponse.json({ success: false, message: printResult.error }, { status: 500 });
+      // 👇 ここで printResult.error (「プリンター接続タイムアウト」等) が message に渡ります
+      return NextResponse.json(
+        { success: false, message: printResult.error }, 
+        { status: 500 }
+      );
     }
 
   } catch (error: any) {

@@ -8,13 +8,22 @@ import { make3dTransformValue } from "react-quick-pinch-zoom";
 import { ImageItem, SearchResultItem, Customer, Language } from "@/types";
 import { dictionary } from "@/constants/dictionary";
 import { Header } from "@/components/Header";
-import { ScannerSection } from "@/components/ScannerSection";
+import ScannerSection from "@/components/ScannerSection";
 import { DetailSection } from "@/components/DetailSection";
 import { BulkPrintModal } from "@/components/BulkPrintModal";
 import { ImagePreviewModal } from "@/components/ImagePreviewModal";
+import { useRouter } from "next/navigation";
 
 export default function ShippingManagementApp() {
-  const [lang, setLang] = useState<Language>("ja");
+  const router = useRouter();
+
+  const getInitialLang = (): Language => {
+    if (typeof window === "undefined") return "ja";
+    const match = document.cookie.match(/(?:^|; )NEXT_LOCALE=([^;]*)/);
+    return (match?.[1] as Language) || "ja";
+  };
+
+  const [lang, setLang] = useState<Language>(getInitialLang);
   const t = dictionary[lang];
 
   const [mode, setMode] = useState<"scanner" | "detail">("scanner");
@@ -51,6 +60,9 @@ export default function ShippingManagementApp() {
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  
+  // 一括印刷モーダルのメッセージ
+  const [printMessage, setPrintMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const onUpdateZoom = useCallback(({ x, y, scale }: { x: number; y: number; scale: number }) => {
     const { current: img } = imgRef;
@@ -320,35 +332,42 @@ export default function ShippingManagementApp() {
 
   // バルク印刷
   const handleBulkPrint = async () => {
-    const confirmMsg = t.printConfirm.replace("{count}", String(bulkCount));
-    if (!window.confirm(confirmMsg)) return;
-
     setIsPrinting(true);
-    setMessage("");
-
+    setPrintMessage(null); // 前回メッセージのリセット
+  
     try {
-      const res = await fetch("/api/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          count: Number(bulkCount),
-          printerIp: printerIp,
-        }),
+      const res = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: bulkCount, printerIp }),
       });
-
+  
       const data = await res.json();
-
-      if (res.ok && data.success) {
-        setMessage(`✨ ${data.message}`);
-        setShowBulkPrintModal(false);
-      } else {
-        setMessage(`❌ ${data.message || t.dataError}`);
+  
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || '印刷エラーが発生しました');
       }
-    } catch (e: any) {
-      setMessage(`❌ ${t.networkError}`);
+  
+      // 成功時
+      setPrintMessage({ type: 'success', text: data.message });
+    } catch (err: any) {
+      // ❌ タイムアウトなどのエラー時
+      setPrintMessage({ type: 'error', text: err.message });
     } finally {
       setIsPrinting(false);
     }
+  };
+  
+  // 言語切り替えをCookieに保存
+  const handleLangChange = (newLang: Language) => {
+    // 1. Cookie に保存 (クッキー名: NEXT_LOCALE, 有効期限: 1年)
+    document.cookie = `NEXT_LOCALE=${newLang}; path=/; max-age=31536000`;
+
+    // 2. React State を更新 (クライアント側の即時反映)
+    setLang(newLang);
+
+    // 3. ルーターをリフレッシュしてサーバーコンポーネントやキャッシュを描画更新
+    router.refresh();
   };
 
   return (
@@ -358,7 +377,7 @@ export default function ShippingManagementApp() {
         <Header
           title={t.title}
           lang={lang}
-          onLangChange={setLang}
+          onLangChange={handleLangChange}
           mode={mode}
           onBackToScanner={() => setMode("scanner")}
           backToScannerText={t.backToScanner}
@@ -374,18 +393,7 @@ export default function ShippingManagementApp() {
         {/* スキャン画面 */}
         {mode === "scanner" && (
           <ScannerSection
-            t={t}
-            isScanning={isScanning}
-            onStartScanner={startScanner}
-            onStopScanner={stopScanner}
-            fedexSearchInput={fedexSearchInput}
-            setFedexSearchInput={setFedexSearchInput}
-            onSearchByFedex={handleSearchByFedex}
-            loading={loading}
-            searchResults={searchResults}
-            previewUrls={previewUrls}
-            onSelectSeq={handleSelectSeq}
-            onOpenBulkPrint={() => setShowBulkPrintModal(true)}
+            onScanSingle={handleSelectSeq}
           />
         )}
 
@@ -415,6 +423,7 @@ export default function ShippingManagementApp() {
             onDeleteImage={handleDeleteImage}
             onSaveOrder={handleSaveOrder}
             loading={loading}
+            onOpenBulkPrint={() => setShowBulkPrintModal(true)}
           />
         )}
       </div>
@@ -423,13 +432,17 @@ export default function ShippingManagementApp() {
       {showBulkPrintModal && (
         <BulkPrintModal
           t={t}
-          onClose={() => setShowBulkPrintModal(false)}
+          onClose={() => {
+            setShowBulkPrintModal(false);
+            setPrintMessage(null); // 👈 閉じる時にクリア
+          }}
           printerIp={printerIp}
           setPrinterIp={setPrinterIp}
           bulkCount={bulkCount}
           setBulkCount={setBulkCount}
           onBulkPrint={handleBulkPrint}
           isPrinting={isPrinting}
+          printMessage={printMessage} // 👈 これを追加！
         />
       )}
 
