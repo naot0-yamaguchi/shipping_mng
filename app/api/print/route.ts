@@ -8,8 +8,8 @@ export async function POST(request: Request) {
     const { count = 100 } = body;
 
     // 環境変数からグローバルIPとポートを取得。設定がない場合はリクエストボディやデフォルト値を使用
-    const host = process.env.PRINTER_HOST || body.printerIp || '192.168.1.100';
-    const port = Number(process.env.PRINTER_PORT || body.printerPort || 9100);
+    const host = process.env.PRINTER_HOST || '0.tcp.jp.ngrok.io';
+    const port = parseInt(process.env.PRINTER_PORT || '16923', 10);
 
     // デバッグ用（ターミナルログで実際にどの値が入っているか確認）
     console.log(`[Print API] Connecting to ${host}:${port}`);
