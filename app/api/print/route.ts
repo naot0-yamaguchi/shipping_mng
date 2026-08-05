@@ -1,21 +1,20 @@
 import { NextResponse } from 'next/server';
 import net from 'net';
+import EscPosEncoder from 'escpos-encoder';
 import { queryD1 } from '@/lib/d1';
 
-export const dynamic = 'force-dynamic'; // キャッシュを防止
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const { count = 100 } = body;
 
-        // 0. D1から最新のプリンター接続設定を取得（更新日時が新しいものを1件）
-        // D1 から設定を取得
+    // 0. D1からプリンター接続情報を取得
     const rawResult = await queryD1(
       `SELECT host, port FROM printer_config WHERE id = 'main'`
     );
 
-    // /raw エンドポイントの構造 (columns / rows) からデータを取り出す
     let host: string | undefined;
     let port: number | undefined;
 
@@ -30,7 +29,6 @@ export async function POST(request: Request) {
       if (portIdx !== -1) port = Number(row[portIdx]);
     }
 
-    // 取得できなかった場合のガード
     if (!host || !port) {
       return NextResponse.json(
         { success: false, message: 'D1から有効な接続情報を取得できませんでした' },
@@ -40,18 +38,27 @@ export async function POST(request: Request) {
 
     console.log(`[Print API] Connecting to ${host}:${port}`);
 
-    // 1. D1から現在の自動採番カウントを取得
-    const rows = await queryD1(
+    // 1. D1から現在の採番を取得（rawResult形式に合わせて修正）
+    const counterRaw = await queryD1(
       `SELECT current_number FROM counters WHERE name = ?`,
       ['tms_sequence']
     );
 
-    const current = rows.length > 0 ? (rows[0].current_number as number) : 0;
+    let current = 0;
+    const hasRecord = counterRaw && counterRaw.rows && counterRaw.rows.length > 0;
+
+    if (hasRecord) {
+      const colIdx = counterRaw.columns.indexOf('current_number');
+      if (colIdx !== -1) {
+        current = Number(counterRaw.rows[0][colIdx]) || 0;
+      }
+    }
+
     const startNum = current + 1;
     const endNum = current + count;
 
-    // DB側のカウントを更新 (レコードが存在しない場合は INSERT、存在する場合は UPDATE)
-    if (rows.length === 0) {
+    // カウントを更新
+    if (!hasRecord) {
       await queryD1(
         `INSERT INTO counters (name, current_number) VALUES (?, ?)`,
         ['tms_sequence', endNum]
@@ -63,25 +70,29 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. 自動採番された番号（startNum 〜 endNum）でTSPLを組み立て
-    let tsplCommand = '';
-
+    // 2. ESC/POS バイナリデータの構築
+    const encoder = new EscPosEncoder();
+    
     for (let i = startNum; i <= endNum; i++) {
       const formattedId = `TMS-${String(i).padStart(3, '0')}`;
 
-      tsplCommand += `SIZE 80 mm, 50 mm\n`;
-      tsplCommand += `GAP 3 mm, 0 mm\n`;
-      tsplCommand += `CLS\n`;
-      tsplCommand += `QRCODE 50,80,M,8,A,0,"${formattedId}"\n`;
-      tsplCommand += `TEXT 360,110,"3.FNT",0,1,1,"ID"\n`;
-      tsplCommand += `TEXT 360,150,"4.FNT",0,1,1,"${formattedId}"\n`;
-      tsplCommand += `PRINT 1,1\n`;
+      encoder
+        .initialize()
+        .align('center')
+        .qrcode(formattedId, 1, 8, 'h') // QRコード印字
+        .newline()
+        .text(`ID: ${formattedId}`)       // IDテキスト印字
+        .newline()
+        .newline()
+        .cut('full');                     // オートカット実行
     }
 
-    // 3. プリンターへTCP送信（環境変数で指定したポートへ送信）
-    const printResult = await sendToPrinter(host, port, tsplCommand);
+    // Uint8Array を Buffer に変換
+    const printBuffer = Buffer.from(encoder.encode());
 
-    // プリンター送信結果の判定部分
+    // 3. プリンターへTCP送信
+    const printResult = await sendToPrinter(host, port, printBuffer);
+
     if (printResult.success) {
       return NextResponse.json({ 
         success: true, 
@@ -99,13 +110,15 @@ export async function POST(request: Request) {
   }
 }
 
-function sendToPrinter(host: string, port: number, data: string): Promise<{ success: boolean; error?: string }> {
+// Data の型を Buffer に変更
+function sendToPrinter(host: string, port: number, data: Buffer): Promise<{ success: boolean; error?: string }> {
   return new Promise((resolve) => {
     const client = new net.Socket();
     client.setTimeout(5000);
 
     client.connect(port, host, () => {
-      client.write(Buffer.from(data, 'utf-8'), () => {
+      // Buffer をそのまま書き込み
+      client.write(data, () => {
         client.end();
         resolve({ success: true });
       });
