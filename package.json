@@ -20,7 +20,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-quick-pinch-zoom": "^5.1.1",
-    "@point-of-sale/receipt-printer-encoder": "^1.4.1"
+    "@point-of-sale/receipt-printer-encoder": "*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
