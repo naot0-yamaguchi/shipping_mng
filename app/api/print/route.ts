@@ -9,14 +9,15 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { count = 100 } = body;
 
-    // 0. D1から最新のプリンター接続設定を取得
+        // 0. D1から最新のプリンター接続設定を取得（更新日時が新しいものを1件）
     const configRows = await queryD1(
-      `SELECT host, port FROM printer_config WHERE id = 'main'`
+      `SELECT host, port FROM printer_config ORDER BY updated_at DESC LIMIT 1`
     );
 
+    // 配列が空の場合のチェック
     if (!configRows || configRows.length === 0) {
       return NextResponse.json(
-        { success: false, message: 'プリンター設定がD1に見つかりません' },
+        { success: false, message: 'D1にプリンター接続情報が存在しません' },
         { status: 400 }
       );
     }
@@ -24,7 +25,6 @@ export async function POST(request: Request) {
     const host = configRows[0].host as string;
     const port = Number(configRows[0].port);
 
-    // デバッグ用（これで 24242 が出力されるようになります）
     console.log(`[Print API] Connecting to ${host}:${port}`);
 
     if (!host) {
