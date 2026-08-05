@@ -22,7 +22,7 @@ type Props = {
   onDeleteImage: (fileName: string, e?: React.MouseEvent) => void;
   onSaveOrder: () => void;
   loading: boolean;
-  onOpenBulkPrint?: () => void; // 🖨️ 一括印刷モーダル用のハンドラーを追加
+  onOpenBulkPrint?: () => void;
 };
 
 export const DetailSection: React.FC<Props> = ({
@@ -50,7 +50,6 @@ export const DetailSection: React.FC<Props> = ({
 }) => {
   return (
     <div className="space-y-4 w-full">
-      {/* 最上部：シーケンス番号 & QR一括印刷ボタン */}
       <div className="p-4 bg-white border border-stone-100 rounded-2xl flex items-center justify-between w-full shadow-sm box-border">
         <div>
           <span className="text-xs text-stone-400 font-bold tracking-wider block">
@@ -61,14 +60,13 @@ export const DetailSection: React.FC<Props> = ({
           </span>
         </div>
 
-        {/* 🖨️ QRコード一括印刷ボタンの復元 */}
         {onOpenBulkPrint && (
           <button
             type="button"
             onClick={onOpenBulkPrint}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm active:scale-95"
           >
-            🖨️ 一括印刷
+            {t.bulkPrintBtn || "🖨️ 一括印刷"}
           </button>
         )}
       </div>
@@ -81,7 +79,6 @@ export const DetailSection: React.FC<Props> = ({
       </div>
 
       <div className="p-5 bg-white border border-stone-100 rounded-3xl space-y-4 shadow-sm w-full box-border">
-        {/* ① お客様名 */}
         <div className="relative space-y-1">
           <label className="text-xs font-bold text-stone-600">
             {t.customerName}
@@ -125,7 +122,6 @@ export const DetailSection: React.FC<Props> = ({
           )}
         </div>
 
-        {/* ② FEDEX Tracking No. */}
         <div className="space-y-1">
           <label className="text-xs font-bold text-stone-600">
             {t.fedexLabel}
@@ -139,7 +135,6 @@ export const DetailSection: React.FC<Props> = ({
           />
         </div>
 
-        {/* ③ 商品画像 */}
         <div className="space-y-3 pt-2 border-t border-stone-100">
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-stone-600">
@@ -168,7 +163,6 @@ export const DetailSection: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* サムネイル一覧 */}
           <div className="grid grid-cols-3 gap-2 pt-1">
             {images.map((img, idx) => {
               const src = img.previewUrl || previewUrls[img.file_name];
@@ -198,7 +192,7 @@ export const DetailSection: React.FC<Props> = ({
                     type="button"
                     onClick={(e) => onDeleteImage(img.file_name, e)}
                     className="absolute top-1 right-1 bg-rose-500 hover:bg-rose-600 text-white w-5 h-5 rounded-full text-[10px] font-bold shadow flex items-center justify-center transition active:scale-90"
-                    title="削除"
+                    title={t.deleteBtn}
                   >
                     ✕
                   </button>
@@ -208,7 +202,6 @@ export const DetailSection: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ④ アクションボタン */}
         <button
           onClick={onSaveOrder}
           disabled={loading || uploading}
