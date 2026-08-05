@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import net from 'net';
 // @ts-ignore
-import EscPosEncoder from 'esc-pos-encoder';
+import ReceiptPrinterEncoder from '@point-of-sale/receipt-printer-encoder';
+
 import { queryD1 } from '@/lib/d1';
 
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,9 @@ export async function POST(request: Request) {
     }
 
     // 2. ESC/POS バイナリデータの構築
-    const encoder = new EscPosEncoder();
+    const encoder = new ReceiptPrinterEncoder({
+  language: 'esc-pos',
+});
     
     for (let i = startNum; i <= endNum; i++) {
       const formattedId = `TMS-${String(i).padStart(3, '0')}`;
