@@ -5,20 +5,20 @@ import { ScanMode } from "@/types";
 import QrScannerModal from "./QrScannerModal";
 
 interface ScannerSectionProps {
+  t: any;
   onScanSingle: (seqNo: string) => void;
   onRefreshList?: () => void;
 }
 
 export default function ScannerSection({
+  t,
   onScanSingle,
   onRefreshList,
 }: ScannerSectionProps) {
   const [mode, setMode] = useState<ScanMode>("single");
 
-  // 通常スキャン用
   const [singleInput, setSingleInput] = useState("");
 
-  // 一括紐付け用
   const [fedexNo, setFedexNo] = useState("");
   const [seqInput, setSeqInput] = useState("");
   const [scannedSeqs, setScannedSeqs] = useState<string[]>([]);
@@ -28,31 +28,26 @@ export default function ScannerSection({
     type: "success" | "error";
   } | null>(null);
 
-  // カメラモーダル制御
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [activeTarget, setActiveTarget] = useState<"single" | "bulk">("single");
 
   const fedexInputRef = useRef<HTMLInputElement>(null);
   const seqInputRef = useRef<HTMLInputElement>(null);
 
-  // カメラ起動処理
   const handleOpenScanner = (target: "single" | "bulk") => {
     setActiveTarget(target);
     setIsScannerOpen(true);
   };
 
-  // QRコード読み取り成功時のハンドラー
   const handleScanSuccess = (decodedText: string) => {
     setIsScannerOpen(false);
 
     if (activeTarget === "single") {
-      // 通常スキャン：取得してそのまま検索実行
       setSingleInput(decodedText);
       onScanSingle(decodedText);
     } else {
-      // 一括紐付け：重複チェックしてリストに追加
       if (scannedSeqs.includes(decodedText)) {
-        setMessage({ text: "既にリストに追加されています", type: "error" });
+        setMessage({ text: t.alreadyInList || "既にリストに追加されています", type: "error" });
       } else {
         setScannedSeqs((prev) => [...prev, decodedText]);
         setMessage(null);
@@ -60,7 +55,6 @@ export default function ScannerSection({
     }
   };
 
-  // 通常スキャンの実行
   const handleSingleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!singleInput.trim()) return;
@@ -68,14 +62,13 @@ export default function ScannerSection({
     setSingleInput("");
   };
 
-  // 一括紐付け：QRコードの連続追加
   const handleAddSeq = (e: React.FormEvent) => {
     e.preventDefault();
     const val = seqInput.trim();
     if (!val) return;
 
     if (scannedSeqs.includes(val)) {
-      setMessage({ text: "既にリストに追加されています", type: "error" });
+      setMessage({ text: t.alreadyInList || "既にリストに追加されています", type: "error" });
     } else {
       setScannedSeqs((prev) => [...prev, val]);
       setMessage(null);
@@ -83,21 +76,19 @@ export default function ScannerSection({
     setSeqInput("");
   };
 
-  // 一括紐付け：リストから個別削除
   const handleRemoveSeq = (targetSeq: string) => {
     setScannedSeqs((prev) => prev.filter((seq) => seq !== targetSeq));
   };
 
-  // 一括紐付け：APIへ一括送信
   const handleBulkSubmit = async () => {
     if (!fedexNo.trim()) {
-      setMessage({ text: "FEDEX追跡番号を入力してください", type: "error" });
+      setMessage({ text: t.requireFedexNo || "FEDEX追跡番号を入力してください", type: "error" });
       fedexInputRef.current?.focus();
       return;
     }
     if (scannedSeqs.length === 0) {
       setMessage({
-        text: "紐付けるQRコードを1件以上スキャンしてください",
+        text: t.requireAtLeastOneQr || "紐付けるQRコードを1件以上スキャンしてください",
         type: "error",
       });
       seqInputRef.current?.focus();
@@ -134,7 +125,6 @@ export default function ScannerSection({
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm border border-rose-100 mb-6">
-      {/* モード切替タブ */}
       <div className="flex bg-rose-50 p-1 rounded-xl mb-4">
         <button
           type="button"
@@ -145,7 +135,7 @@ export default function ScannerSection({
               : "text-slate-500 hover:text-rose-400"
           }`}
         >
-          🔍 通常スキャン
+          {t.scanModeSingle || "🔍 通常スキャン"}
         </button>
         <button
           type="button"
@@ -156,11 +146,10 @@ export default function ScannerSection({
               : "text-slate-500 hover:text-rose-400"
           }`}
         >
-          📦 FEDEX追跡番号 一括紐付け
+          {t.scanModeBulkFedex || "📦 FEDEX追跡番号 一括紐付け"}
         </button>
       </div>
 
-      {/* メッセージ表示 */}
       {message && (
         <div
           className={`p-3 rounded-xl mb-4 text-xs font-semibold ${
@@ -173,26 +162,24 @@ export default function ScannerSection({
         </div>
       )}
 
-      {/* 1. 通常スキャンモード */}
       {mode === "single" && (
         <form onSubmit={handleSingleSubmit} className="space-y-3">
           <label className="block text-xs font-bold text-slate-500">
-            荷物QRコード / シーケンス番号を入力
+            {t.singleInputLabel || "荷物QRコード / シーケンス番号を入力"}
           </label>
           <div className="flex gap-2">
             <input
               type="text"
               value={singleInput}
               onChange={(e) => setSingleInput(e.target.value)}
-              placeholder="例: TMS-001"
+              placeholder={t.singleInputPlaceholder || "例: TMS-001"}
               className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-rose-400 text-sm"
             />
-            {/* 📷 カメラ起動ボタン */}
             <button
               type="button"
               onClick={() => handleOpenScanner("single")}
               className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm transition-colors flex items-center justify-center"
-              title="カメラでスキャン"
+              title={t.startScanner}
             >
               📷
             </button>
@@ -200,34 +187,31 @@ export default function ScannerSection({
               type="submit"
               className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl text-sm transition-colors shadow-sm"
             >
-              検索
+              {t.searchBtn}
             </button>
           </div>
         </form>
       )}
 
-      {/* 2. FEDEX追跡番号 一括紐付けモード */}
       {mode === "bulk_fedex" && (
         <div className="space-y-4">
-          {/* FEDEX追跡番号のセット */}
           <div>
             <label className="block text-xs font-bold text-slate-500 mb-1">
-              ① FEDEX 追跡番号
+              {t.step1FedexTitle || "① FEDEX 追跡番号"}
             </label>
             <input
               ref={fedexInputRef}
               type="text"
               value={fedexNo}
               onChange={(e) => setFedexNo(e.target.value)}
-              placeholder="例: 778312345678"
+              placeholder={t.fedexPlaceholder}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-rose-400 text-sm font-mono"
             />
           </div>
 
-          {/* 連続QRスキャン入力 */}
           <form onSubmit={handleAddSeq}>
             <label className="block text-xs font-bold text-slate-500 mb-1">
-              ② 紐付ける荷物QRコードを連続スキャン
+              {t.step2ScanTitle || "② 紐付ける荷物QRコードを連続スキャン"}
             </label>
             <div className="flex gap-2">
               <input
@@ -235,15 +219,14 @@ export default function ScannerSection({
                 type="text"
                 value={seqInput}
                 onChange={(e) => setSeqInput(e.target.value)}
-                placeholder="QRをスキャン..."
+                placeholder="QR..."
                 className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-rose-400 text-sm"
               />
-              {/* 📷 カメラ起動ボタン */}
               <button
                 type="button"
                 onClick={() => handleOpenScanner("bulk")}
                 className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm transition-colors flex items-center justify-center"
-                title="カメラでスキャン"
+                title={t.startScanner}
               >
                 📷
               </button>
@@ -251,24 +234,23 @@ export default function ScannerSection({
                 type="submit"
                 className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-colors"
               >
-                追加
+                {t.addBtn || "追加"}
               </button>
             </div>
           </form>
 
-          {/* スキャン済みリスト表示 */}
           {scannedSeqs.length > 0 && (
             <div className="mt-3">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-xs font-bold text-slate-500">
-                  スキャン済み ({scannedSeqs.length}件)
+                  {(t.scannedCount || "スキャン済み ({count}件)").replace("{count}", String(scannedSeqs.length))}
                 </span>
                 <button
                   type="button"
                   onClick={() => setScannedSeqs([])}
                   className="text-xs text-rose-400 hover:underline"
                 >
-                  すべてクリア
+                  {t.clearAll || "すべてクリア"}
                 </button>
               </div>
               <div className="max-h-40 overflow-y-auto space-y-1.5 bg-slate-50 p-2 rounded-xl border border-slate-100">
@@ -291,26 +273,23 @@ export default function ScannerSection({
                 ))}
               </div>
 
-              {/* 一括登録実行ボタン */}
               <button
                 type="button"
                 onClick={handleBulkSubmit}
                 disabled={isSubmitting}
                 className="w-full mt-3 py-3 bg-rose-500 hover:bg-rose-600 disabled:bg-rose-300 text-white font-bold rounded-xl text-sm shadow-md transition-all flex justify-center items-center gap-2"
               >
-                {isSubmitting ? (
-                  "登録中..."
-                ) : (
-                  <>✨ {scannedSeqs.length}件の荷物に一括紐付け</>
-                )}
+                {isSubmitting
+                  ? t.submitting || "登録中..."
+                  : (t.bulkBindBtn || "✨ {count}件の荷物に一括紐付け").replace("{count}", String(scannedSeqs.length))}
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* カメラ読み取り用モーダル */}
       <QrScannerModal
+        t={t}
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onScanSuccess={handleScanSuccess}
