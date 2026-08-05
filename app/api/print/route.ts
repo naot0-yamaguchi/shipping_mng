@@ -10,26 +10,35 @@ export async function POST(request: Request) {
     const { count = 100 } = body;
 
         // 0. D1から最新のプリンター接続設定を取得（更新日時が新しいものを1件）
-    const configRows = await queryD1(
-      `SELECT host, port FROM printer_config ORDER BY updated_at DESC LIMIT 1`
+        // D1 から設定を取得
+    const rawResult = await queryD1(
+      `SELECT host, port FROM printer_config WHERE id = 'main'`
     );
 
-    // 配列が空の場合のチェック
-    if (!configRows || configRows.length === 0) {
+    // /raw エンドポイントの構造 (columns / rows) からデータを取り出す
+    let host: string | undefined;
+    let port: number | undefined;
+
+    if (rawResult && rawResult.columns && rawResult.rows && rawResult.rows.length > 0) {
+      const columns: string[] = rawResult.columns;
+      const row: any[] = rawResult.rows[0];
+
+      const hostIdx = columns.indexOf('host');
+      const portIdx = columns.indexOf('port');
+
+      if (hostIdx !== -1) host = row[hostIdx];
+      if (portIdx !== -1) port = Number(row[portIdx]);
+    }
+
+    // 取得できなかった場合のガード
+    if (!host || !port) {
       return NextResponse.json(
-        { success: false, message: 'D1にプリンター接続情報が存在しません' },
+        { success: false, message: 'D1から有効な接続情報を取得できませんでした' },
         { status: 400 }
       );
     }
 
-    const host = configRows[0].host as string;
-    const port = Number(configRows[0].port);
-
     console.log(`[Print API] Connecting to ${host}:${port}`);
-
-    if (!host) {
-      return NextResponse.json({ success: false, message: 'プリンターIP/ホストが指定されていません' }, { status: 400 });
-    }
 
     // 1. D1から現在の自動採番カウントを取得
     const rows = await queryD1(
