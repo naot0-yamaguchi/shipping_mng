@@ -9,7 +9,6 @@ type Props = {
   setBulkCount: (val: number) => void;
   onBulkPrint: () => void;
   isPrinting: boolean;
-  // ✉️ メッセージ表示用のPropsを追加
   printMessage?: { type: "success" | "error"; text: string } | null;
 };
 
@@ -37,7 +36,6 @@ export const BulkPrintModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* ✉️ メッセージ表示エリア (エラー / 成功) */}
         {printMessage && (
           <div
             className={`p-3 rounded-2xl text-xs font-bold leading-relaxed border ${
@@ -76,7 +74,7 @@ export const BulkPrintModal: React.FC<Props> = ({
                       : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
                   }`}
                 >
-                  {num}枚
+                  {num}
                 </button>
               ))}
             </div>
