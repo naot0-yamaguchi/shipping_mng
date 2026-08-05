@@ -2,16 +2,29 @@ import { NextResponse } from 'next/server';
 import net from 'net';
 import { queryD1 } from '@/lib/d1';
 
+export const dynamic = 'force-dynamic'; // キャッシュを防止
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const { count = 100 } = body;
 
-    // 環境変数からグローバルIPとポートを取得。設定がない場合はリクエストボディやデフォルト値を使用
-    const host = process.env.PRINTER_HOST || '0.tcp.jp.ngrok.io';
-    const port = parseInt(process.env.PRINTER_PORT || '16923', 10);
+    // 0. D1から最新のプリンター接続設定を取得
+    const configRows = await queryD1(
+      `SELECT host, port FROM printer_config WHERE id = 'main'`
+    );
 
-    // デバッグ用（ターミナルログで実際にどの値が入っているか確認）
+    if (!configRows || configRows.length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'プリンター設定がD1に見つかりません' },
+        { status: 400 }
+      );
+    }
+
+    const host = configRows[0].host as string;
+    const port = Number(configRows[0].port);
+
+    // デバッグ用（これで 24242 が出力されるようになります）
     console.log(`[Print API] Connecting to ${host}:${port}`);
 
     if (!host) {
