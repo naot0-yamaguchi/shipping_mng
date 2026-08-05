@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import net from 'net';
-import EscPosEncoder from 'escpos-encoder';
+// @ts-ignore
+import EscPosEncoder from 'esc-pos-encoder';
 import { queryD1 } from '@/lib/d1';
 
 export const dynamic = 'force-dynamic';
