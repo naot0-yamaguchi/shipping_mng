@@ -17,14 +17,15 @@ import { useRouter } from "next/navigation";
 export default function ShippingManagementApp() {
   const router = useRouter();
 
+  // デフォルト言語をタイ語 (th) に設定
   const getInitialLang = (): Language => {
-    if (typeof window === "undefined") return "ja";
+    if (typeof window === "undefined") return "th";
     const match = document.cookie.match(/(?:^|; )NEXT_LOCALE=([^;]*)/);
-    return (match?.[1] as Language) || "ja";
+    return (match?.[1] as Language) || "th";
   };
 
   const [lang, setLang] = useState<Language>(getInitialLang);
-  const t = dictionary[lang];
+  const t = dictionary[lang] || dictionary["th"] || dictionary["ja"];
 
   const [mode, setMode] = useState<"scanner" | "detail">("scanner");
   const [seqNo, setSeqNo] = useState<string>("");
@@ -106,7 +107,7 @@ export default function ShippingManagementApp() {
         );
       } catch (err: any) {
         console.error(err);
-        setMessage(`${t.scanError}: ${err?.message || ""}`);
+        setMessage(`${t.scanError || "Scan Error"}: ${err?.message || ""}`);
         setIsScanning(false);
       }
     }, 100);
@@ -139,10 +140,10 @@ export default function ShippingManagementApp() {
         setImages(fetchedImages);
         fetchedImages.forEach((img) => fetchPreviewUrl(img.file_name));
       } else {
-        setMessage(t.dataError);
+        setMessage(t.dataError || "Data fetch error");
       }
     } catch (e) {
-      setMessage(t.networkError);
+      setMessage(t.networkError || "Network error");
     } finally {
       setLoading(false);
     }
@@ -164,10 +165,10 @@ export default function ShippingManagementApp() {
           if (item.thumbnail) fetchPreviewUrl(item.thumbnail);
         });
       } else {
-        setMessage(t.dataError);
+        setMessage(t.dataError || "Data fetch error");
       }
     } catch (e) {
-      setMessage(t.networkError);
+      setMessage(t.networkError || "Network error");
     } finally {
       setLoading(false);
     }
@@ -205,7 +206,7 @@ export default function ShippingManagementApp() {
     if (!files || files.length === 0) return;
 
     setUploading(true);
-    setMessage(t.uploadingMsg);
+    setMessage(t.uploadingMsg || "Uploading...");
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -248,14 +249,14 @@ export default function ShippingManagementApp() {
     }
 
     setUploading(false);
-    setMessage(t.uploadSuccess);
+    setMessage(t.uploadSuccess || "Upload complete! ✨");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // 画像削除
   const handleDeleteImage = async (fileName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (!window.confirm(t.deleteConfirm)) return;
+    if (!window.confirm(t.deleteConfirm || "Delete this photo?")) return;
 
     setLoading(true);
     try {
@@ -264,15 +265,15 @@ export default function ShippingManagementApp() {
       });
 
       if (res.ok) {
-        setMessage(t.deleteSuccess);
+        setMessage(t.deleteSuccess || "Deleted successfully");
         setImages((prev) => prev.filter((img) => img.file_name !== fileName));
         if (previewIndex !== null) setPreviewIndex(null);
       } else {
-        setMessage(t.deleteError);
+        setMessage(t.deleteError || "Delete error");
       }
     } catch (err) {
       console.error(err);
-      setMessage(t.deleteError);
+      setMessage(t.deleteError || "Delete error");
     } finally {
       setLoading(false);
     }
@@ -313,7 +314,7 @@ export default function ShippingManagementApp() {
       const data = await res.json();
 
       if (res.ok) {
-        setMessage(t.saveSuccess.replace("{seq}", seqNo));
+        setMessage((t.saveSuccess || "Saved: {seq}").replace("{seq}", seqNo));
         setMode("scanner");
         setSeqNo("");
         setCustomerName("");
@@ -321,10 +322,10 @@ export default function ShippingManagementApp() {
         setImages([]);
         setSearchResults(null);
       } else {
-        setMessage(data.error || t.dataError);
+        setMessage(data.error || t.dataError || "Error saving");
       }
     } catch (e) {
-      setMessage(t.networkError);
+      setMessage(t.networkError || "Network error");
     } finally {
       setLoading(false);
     }
@@ -333,7 +334,7 @@ export default function ShippingManagementApp() {
   // バルク印刷
   const handleBulkPrint = async () => {
     setIsPrinting(true);
-    setPrintMessage(null); // 前回メッセージのリセット
+    setPrintMessage(null);
   
     try {
       const res = await fetch('/api/print', {
@@ -345,34 +346,28 @@ export default function ShippingManagementApp() {
       const data = await res.json();
   
       if (!res.ok || !data.success) {
-        throw new Error(data.message || '印刷エラーが発生しました');
+        throw new Error(data.message || 'Printing failed');
       }
   
-      // 成功時
       setPrintMessage({ type: 'success', text: data.message });
     } catch (err: any) {
-      // ❌ タイムアウトなどのエラー時
       setPrintMessage({ type: 'error', text: err.message });
     } finally {
       setIsPrinting(false);
     }
   };
   
-  // 言語切り替えをCookieに保存
+  // 言語切り替え
   const handleLangChange = (newLang: Language) => {
-    // 1. Cookie に保存 (クッキー名: NEXT_LOCALE, 有効期限: 1年)
     document.cookie = `NEXT_LOCALE=${newLang}; path=/; max-age=31536000`;
-
-    // 2. React State を更新 (クライアント側の即時反映)
     setLang(newLang);
-
-    // 3. ルーターをリフレッシュしてサーバーコンポーネントやキャッシュを描画更新
     router.refresh();
   };
 
+  // page.tsx の return 部分の最外枠
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 p-4 w-full box-border overscroll-y-contain touch-manipulation overflow-x-hidden font-sans">
-      <div className="max-w-md mx-auto w-full">
+    <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 w-full box-border overscroll-y-contain touch-manipulation overflow-x-hidden font-sans">
+      <div className="relative max-w-md mx-auto w-full flex flex-col gap-4">
         {/* ヘッダー */}
         <Header
           title={t.title}
@@ -383,48 +378,54 @@ export default function ShippingManagementApp() {
           backToScannerText={t.backToScanner}
         />
 
-        {/* メッセージ表示 */}
+        {/* メッセージトースト */}
         {message && (
-          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-2xl shadow-sm text-center font-medium animate-fade-in">
-            {message}
+          <div className="p-3.5 bg-white border-2 border-pink-300 text-pink-700 text-sm rounded-2xl shadow-lg text-center font-bold flex items-center justify-center gap-2">
+            <span>✨</span>
+            <span>{message}</span>
           </div>
         )}
 
         {/* スキャン画面 */}
         {mode === "scanner" && (
-          <ScannerSection
-            onScanSingle={handleSelectSeq}
-          />
+          <main className="w-full">
+            <ScannerSection
+              onScanSingle={handleSelectSeq}
+              onOpenBulkPrint={() => setShowBulkPrintModal(true)}
+            />
+          </main>
         )}
 
         {/* 詳細画面 */}
         {mode === "detail" && (
-          <DetailSection
-            t={t}
-            seqNo={seqNo}
-            customerName={customerName}
-            setCustomerName={setCustomerName}
-            fetchCustomers={fetchCustomers}
-            showSuggestions={showSuggestions}
-            setShowSuggestions={setShowSuggestions}
-            customerSuggestions={customerSuggestions}
-            handleAddCustomer={handleAddCustomer}
-            fedexTrackingNo={fedexTrackingNo}
-            setFedexTrackingNo={setFedexTrackingNo}
-            images={images}
-            previewUrls={previewUrls}
-            uploading={uploading}
-            fileInputRef={fileInputRef}
-            handleImageUpload={handleImageUpload}
-            onPreviewImage={(idx, fileName) => {
-              if (fileName) fetchPreviewUrl(fileName);
-              setPreviewIndex(idx);
-            }}
-            onDeleteImage={handleDeleteImage}
-            onSaveOrder={handleSaveOrder}
-            loading={loading}
-            onOpenBulkPrint={() => setShowBulkPrintModal(true)}
-          />
+          <main className="w-full">
+            <DetailSection
+              t={t}
+              seqNo={seqNo}
+              customerName={customerName}
+              setCustomerName={setCustomerName}
+              fetchCustomers={fetchCustomers}
+              showSuggestions={showSuggestions}
+              setShowSuggestions={setShowSuggestions}
+              customerSuggestions={customerSuggestions}
+              handleAddCustomer={handleAddCustomer}
+              fedexTrackingNo={fedexTrackingNo}
+              setFedexTrackingNo={setFedexTrackingNo}
+              images={images}
+              previewUrls={previewUrls}
+              uploading={uploading}
+              fileInputRef={fileInputRef}
+              handleImageUpload={handleImageUpload}
+              onPreviewImage={(idx, fileName) => {
+                if (fileName) fetchPreviewUrl(fileName);
+                setPreviewIndex(idx);
+              }}
+              onDeleteImage={handleDeleteImage}
+              onSaveOrder={handleSaveOrder}
+              loading={loading}
+              onOpenBulkPrint={() => setShowBulkPrintModal(true)}
+            />
+          </main>
         )}
       </div>
 
@@ -434,15 +435,13 @@ export default function ShippingManagementApp() {
           t={t}
           onClose={() => {
             setShowBulkPrintModal(false);
-            setPrintMessage(null); // 👈 閉じる時にクリア
+            setPrintMessage(null);
           }}
-          printerIp={printerIp}
-          setPrinterIp={setPrinterIp}
           bulkCount={bulkCount}
           setBulkCount={setBulkCount}
           onBulkPrint={handleBulkPrint}
           isPrinting={isPrinting}
-          printMessage={printMessage} // 👈 これを追加！
+          printMessage={printMessage}
         />
       )}
 

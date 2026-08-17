@@ -19,30 +19,40 @@ export const Header: React.FC<Props> = ({
   backToScannerText,
 }) => {
   return (
-    <header className="flex justify-between items-center mb-5 pb-2 border-b border-stone-200">
-      <h1 className="text-xl font-bold tracking-tight text-stone-800 flex items-center gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block"></span>
-        {title}
-      </h1>
+    <header className="flex justify-between items-center py-2 px-1">
       <div className="flex items-center gap-2">
-        <select
-          value={lang}
-          onChange={(e) => onLangChange(e.target.value as Language)}
-          className="bg-white text-xs text-stone-600 font-medium border border-stone-200 rounded-full px-3 py-1 focus:outline-none shadow-sm"
-        >
-          <option value="ja">日本語</option>
-          <option value="en">English</option>
-          <option value="th">ไทย</option>
-        </select>
+        <div className="w-8 h-8 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 flex items-center justify-center text-white shadow-md shadow-pink-200 text-sm font-black">
+          📦
+        </div>
+        <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-pink-600 via-rose-500 to-purple-600 bg-clip-text text-transparent">
+          {title}
+        </h1>
+      </div>
 
+      <div className="flex items-center gap-2">
         {mode === "detail" && (
           <button
             onClick={onBackToScanner}
-            className="text-xs bg-white hover:bg-stone-100 text-stone-600 px-3.5 py-1 rounded-full border border-stone-200 font-medium shadow-sm transition"
+            className="text-xs bg-white/80 backdrop-blur text-pink-600 font-semibold px-3 py-1.5 rounded-full border border-pink-200 shadow-sm hover:bg-pink-50 active:scale-95 transition flex items-center gap-1"
           >
-            {backToScannerText}
+            <span>←</span> {backToScannerText}
           </button>
         )}
+
+        <div className="relative">
+          <select
+            value={lang}
+            onChange={(e) => onLangChange(e.target.value as Language)}
+            className="appearance-none bg-white/80 backdrop-blur text-xs text-slate-700 font-bold border border-pink-100 rounded-full pl-3 pr-6 py-1.5 focus:outline-none focus:ring-2 focus:ring-pink-300 shadow-sm cursor-pointer"
+          >
+            <option value="th">🇹🇭 ไทย</option>
+            <option value="en">🇺🇸 EN</option>
+            <option value="ja">🇯🇵 JP</option>
+          </select>
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none text-slate-400">
+            ▼
+          </span>
+        </div>
       </div>
     </header>
   );
