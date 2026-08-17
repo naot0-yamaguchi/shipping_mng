@@ -83,6 +83,7 @@ export default function ScannerSection({
 
       {/* QRスキャンモーダル */}
       <QrScannerModal
+        t={t}
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onScanSuccess={handleScanSuccess}
